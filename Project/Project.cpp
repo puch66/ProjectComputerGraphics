@@ -246,9 +246,9 @@ class Project : public BaseProject {
 		
 		// Init local variables
 		CamH = 1.0f;
-		CamRadius = 3.0f;
+		//CamRadius = 3.0f;
 		CamPitch = glm::radians(15.f);
-		CamYaw = glm::radians(30.f);
+		CamYaw = glm::radians(0.f);
 		gameState = 0;
 	}
 	
@@ -530,22 +530,32 @@ class Project : public BaseProject {
 		const float FOVy = glm::radians(90.0f);
 		const float nearPlane = 0.1f;
 		const float farPlane = 100.0f;
-		const float rotSpeed = glm::radians(90.0f);
-		const float movSpeed = 1.0f;
+		const float rotSpeed = glm::radians(120.0f);
+		const float movSpeed = 2.0f;
+
+		// Camera Pitch limits
+		const float minPitch = glm::radians(-8.75f);
+		const float maxPitch = glm::radians(60.0f);
+		float prev_pitch = CamPitch;
+
+		//Current player angle
+		static float yaw = 0.0f;
 		
-		CamH += m.z * movSpeed * deltaT;
+		//CamH += m.z * movSpeed * deltaT;
+		const float camDist = 2.0f;
 		CamRadius -= m.x * movSpeed * deltaT;
 		CamPitch -= r.x * rotSpeed * deltaT;
-		CamYaw += r.y * rotSpeed * deltaT;
+		yaw -= r.y * rotSpeed * deltaT;
 		
+		//Projection matrix
 		glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
 		Prj[1][1] *= -1;
 		glm::vec3 camTarget = glm::vec3(0,CamH,0);
 		glm::vec3 camPos    = camTarget +
-							  CamRadius * glm::vec3(cos(CamPitch) * sin(CamYaw),
+							  CamRadius * glm::vec3(cos(CamPitch) * sin(yaw),
 													sin(CamPitch),
-													cos(CamPitch) * cos(CamYaw));
-		glm::mat4 View = glm::lookAt(camPos, camTarget, glm::vec3(0,1,0));
+													cos(CamPitch) * cos(yaw));
+		//glm::mat4 View = glm::lookAt(camPos, camTarget, glm::vec3(0,1,0));
 
 		gubo.DlightDir = glm::normalize(glm::vec3(1, 2, 3));
 		gubo.DlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -559,19 +569,49 @@ class Project : public BaseProject {
 		// the third parameter is its size
 		// the fourth parameter is the location inside the descriptor set of this uniform block
 
-		glm::mat4 World = glm::mat4(1);		
+		static glm::vec3 bodyPos;
+
+		// The Walk model update procedure
+		glm::vec3 ux = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(1, 0, 0, 1));
+		glm::vec3 uy = glm::vec3(0, 1, 0);
+		glm::vec3 uz = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(0, 0, -1, 1));
+
+		bodyPos += ux * movSpeed * m.x * deltaT;
+		bodyPos += uy * movSpeed * m.y * deltaT;
+		bodyPos += uz * movSpeed * m.z * deltaT;
+
+		glm::mat4 World =
+			glm::translate(glm::mat4(1.0), glm::vec3(bodyPos)) *
+			glm::rotate(glm::mat4(1.0), yaw, glm::vec3(0, 1, 0)) *
+			glm::scale(glm::mat4(1.0), glm::vec3(1.0f));
+
+		//View matrix
+		if (CamPitch > maxPitch || CamPitch < minPitch) CamPitch = prev_pitch;
+
+		//rotate the world matrix on y axis to make the player turn
+		CamYaw += rotSpeed * r.z * deltaT;
+		glm::mat4 World_y = World * glm::rotate(glm::mat4(1.0), CamYaw, glm::vec3(0, 1, 0));
+
+		glm::vec3 c(World_y* glm::vec4(0, CamH + camDist * sin(CamPitch), camDist* cos(CamPitch), 1));
+		glm::vec3 a(glm::vec3(World* glm::vec4(0, 0, 0, 1)) + glm::vec3(0, CamH, 0));
+		glm::mat4 View = glm::lookAt(c, a, glm::vec3(0, 1, 0));
+
+		//View-projection matrix
+		glm::mat4 ViewPrj = Prj * View;
+
+		//glm::mat4 World = glm::mat4(1);	
 		uboBody.amb = 1.0f; uboBody.gamma = 180.0f; uboBody.sColor = glm::vec3(1.0f);
-		uboBody.mvpMat = Prj * View * World;
-		uboBody.mMat = World;
-		uboBody.nMat = glm::inverse(glm::transpose(World));
+		uboBody.mMat = World /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0,1,0))*/;
+		uboBody.mvpMat = ViewPrj * uboBody.mMat;
+		uboBody.nMat = glm::inverse(glm::transpose(uboBody.mMat));
 		DSBody.map(currentImage, &uboBody, sizeof(uboBody), 0);
 	
 		World = glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(0.3f,0.5f,-0.15f)),
 							HandleRot, glm::vec3(1,0,0));
 		uboHandle.amb = 1.0f; uboHandle.gamma = 180.0f; uboHandle.sColor = glm::vec3(1.0f);
-		uboHandle.mvpMat = Prj * View * World;
 		uboHandle.mMat = World;
-		uboHandle.nMat = glm::inverse(glm::transpose(World));
+		uboHandle.mvpMat = ViewPrj * uboHandle.mMat;
+		uboHandle.nMat = glm::inverse(glm::transpose(uboHandle.mMat));
 		DSHandle.map(currentImage, &uboHandle, sizeof(uboHandle), 0);
 	
 		World = glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(-0.15f,0.93f,-0.15f)),
