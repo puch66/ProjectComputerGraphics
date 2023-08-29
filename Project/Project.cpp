@@ -1,15 +1,70 @@
 // This has been adapted from the Vulkan tutorial
-
 #include "Starter.hpp"
 
-// The uniform buffer objects data structures
-// Remember to use the correct alignas(...) value
-//        float : alignas(4)
-//        vec2  : alignas(8)
-//        vec3  : alignas(16)
-//        vec4  : alignas(16)
-//        mat3  : alignas(16)
-//        mat4  : alignas(16)
+/* mesh->oggetti
+ overlay -> menù
+ gubo -> ambiente
+
+ PER AGGIUNGERE UN OGGETTO:
+ Model<VertexMesh> MObject; //solo se non è presente già una copia di quell'oggetto
+ DescriptorSet DSObject;
+ Texture TObject; //solo se non è presente già una copia di quell'oggetto
+ MeshUniformBlock uboObject;
+
+ uniformBlocksInPool = aumenta di 1;
+ texturesInPool = aumenta di 1; //solo se non è presente già una copia di quell'oggetto
+ setsInPool = aumenta di 1;
+
+ se l'oggetto ha una mesh:
+ MBody.init(this,   &VMesh, "Models/ObjectMesh.obj", OBJ);
+ se invece vuoi farlo a mano come per gli assignment:
+ MObject.vertices = *come negli assignment*
+ MObject.indices = *come negli assignment*;
+ MObject.initMesh(this, &VMesh);
+
+ TObject.init(this,   "textures/ObjectTexture.png");
+ DSObject.init(this, &DSLMesh, {
+					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+					{1, TEXTURE, 0, &TObject}
+				});
+ 
+ DSObject.cleanup();
+ TObject.cleanup();
+ MObject.cleanup();
+
+ MObject.bind(commandBuffer);
+ DSObject.bind(commandBuffer, PMesh, 1, currentImage); //attenti a metterlo vicino agli altri oggetti che usano la stessa pipeline
+ vkCmdDrawIndexed(commandBuffer,
+		static_cast<uint32_t>(MObject.indices.size()), 1, 0, 0, 0);
+
+ posizionare l'oggetto nel mondo:
+ World = ruotare e traslare a piacimento;
+ uboObject.amb = 1.0f; uboObject.gamma = 180.0f; uboObject.sColor = glm::vec3(1.0f);
+ uboObject.mvpMat = ViewPrj * World;
+ uboObject.mMat = World;
+ uboObject.nMat = glm::inverse(glm::transpose(World));
+ DSObject.map(currentImage, &uboObject, sizeof(uboObject), 0);
+
+ PER CREARE UN NUOVO SHADER:
+ Pipeline PMeshNew;
+ PMeshNew.init(this, &VMesh, "shaders/MeshVert.spv", "shaders/MeshNewFrag.spv", {&DSLGubo, &DSLMesh});
+
+ lo shader MeshNewFrag.spv deve essere compilato a partire da uno shader MeshNew.frag
+ che deve essere il copia-incolla di Mesh.frag a cui va cambiata la BDRF function
+
+ PMeshNew.create();
+ PMeshNew.cleanup();
+ PMeshNew.destroy();
+
+ gli oggetti che vogliono avere il nuovo shader devono avere la pipeline nuova AL POSTO DELLA VECCHIA:
+ DSObject.bind(commandBuffer, PNewMesh, 1, currentImage);
+
+ PMesh.bind(commandBuffer);
+
+ per cambiare dinamicamente la pipeline, basta fare uno switch-case nella populateCommandBuffer (vedi A12.cpp riga 329)
+ poi, quando viene cambiata scena (es. si preme spazio): RebuildPipeline(); (vedi A12.cpp riga 411)
+
+ */
 
 struct MeshUniformBlock {
 	alignas(4) float amb;
@@ -43,12 +98,8 @@ struct VertexOverlay {
 	glm::vec2 UV;
 };
 
-struct VertexVColor {
-	glm::vec3 pos;
-	glm::vec3 norm;
-	glm::vec3 color;
-};
-
+//functions (to be moved in separate files)
+void createSphereMesh(std::vector<VertexMesh>& vDef, std::vector<uint32_t>& vIdx);
 
 
 // MAIN ! 
@@ -59,28 +110,26 @@ class Project : public BaseProject {
 	float Ar;
 
 	// Descriptor Layouts ["classes" of what will be passed to the shaders]
-	DescriptorSetLayout DSLGubo, DSLMesh, DSLOverlay, DSLVColor;
+	//overlay -> triggers
+	//mesh -> objects
+	//gubo -> environment
+	DescriptorSetLayout DSLGubo, DSLMesh, DSLOverlay;
 
 	// Vertex formats
-	VertexDescriptor VMesh;
-	VertexDescriptor VOverlay;
-	VertexDescriptor VVColor;
+	VertexDescriptor VMesh, VOverlay;
 
 	// Pipelines [Shader couples]
-	Pipeline PMesh;
-	Pipeline POverlay;
-	Pipeline PVColor;
+	Pipeline PMesh, POverlay;
 
 	// Models, textures and Descriptors (values assigned to the uniforms)
 	// Please note that Model objects depends on the corresponding vertex structure
-	Model<VertexMesh> MBody, MHandle, MWheel;
-	Model<VertexVColor> MRoom;
+	Model<VertexMesh> MBody, MHandle, MWheel, MRoom, MMars;
 	Model<VertexOverlay> MKey, MSplash;
-	DescriptorSet DSGubo, DSBody, DSHandle, DSWheel1, DSWheel2, DSWheel3, DSKey, DSSplash, DSRoom;
-	Texture TBody, THandle, TWheel, TKey, TSplash;
+	DescriptorSet DSGubo, DSBody, DSHandle, DSWheel1, DSWheel2, DSWheel3, DSKey, DSSplash, DSRoom, DSMars;
+	Texture TBody, THandle, TWheel, TKey, TSplash, TMars;
 	
 	// C++ storage for uniform variables
-	MeshUniformBlock uboBody, uboHandle, uboWheel1, uboWheel2, uboWheel3, uboRoom;
+	MeshUniformBlock uboBody, uboHandle, uboWheel1, uboWheel2, uboWheel3, uboRoom, uboMars;
 	GlobalUniformBlock gubo;
 	OverlayUniformBlock uboKey, uboSplash;
 
@@ -103,9 +152,9 @@ class Project : public BaseProject {
 		initialBackgroundColor = {0.0f, 0.005f, 0.01f, 1.0f};
 		
 		// Descriptor pool sizes
-		uniformBlocksInPool = 9;
-		texturesInPool = 7;
-		setsInPool = 9;
+		uniformBlocksInPool = 11; //contare gli ubo (perché uno in più? è un bug mio?)
+		texturesInPool = 8; //contare le texture nei ds.init
+		setsInPool = 10; //contare i descriptor set
 		
 		Ar = (float)windowWidth / (float)windowHeight;
 	}
@@ -134,10 +183,6 @@ class Project : public BaseProject {
 					{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
 					{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}
 				});
-
-		DSLVColor.init(this, {
-					{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS}
-			});
 				
 		DSLGubo.init(this, {
 					{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS}
@@ -189,27 +234,17 @@ class Project : public BaseProject {
 				         sizeof(glm::vec2), UV}
 				});
 
-		VVColor.init(this, {
-				  {0, sizeof(VertexVColor), VK_VERTEX_INPUT_RATE_VERTEX}
-				}, {
-				  {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VertexVColor, pos),
-						 sizeof(glm::vec3), POSITION},
-				  {0, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VertexVColor, norm),
-						 sizeof(glm::vec3), NORMAL},
-				  {0, 2, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VertexVColor, color),
-						 sizeof(glm::vec3), COLOR}
-				});
-
 		// Pipelines [Shader couples]
 		// The second parameter is the pointer to the vertex definition
 		// Third and fourth parameters are respectively the vertex and fragment shaders
 		// The last array, is a vector of pointer to the layouts of the sets that will
 		// be used in this pipeline. The first element will be set 0, and so on..
 		PMesh.init(this, &VMesh, "shaders/MeshVert.spv", "shaders/MeshFrag.spv", {&DSLGubo, &DSLMesh});
+		PMesh.setAdvancedFeatures(VK_COMPARE_OP_LESS, VK_POLYGON_MODE_FILL,
+									VK_CULL_MODE_NONE, false);
 		POverlay.init(this, &VOverlay, "shaders/OverlayVert.spv", "shaders/OverlayFrag.spv", {&DSLOverlay});
 		POverlay.setAdvancedFeatures(VK_COMPARE_OP_LESS_OR_EQUAL, VK_POLYGON_MODE_FILL,
  								    VK_CULL_MODE_NONE, false);
-		PVColor.init(this, &VVColor, "shaders/VColorVert.spv", "shaders/VColorFrag.spv", {&DSLGubo, &DSLVColor});
 
 		// Models, textures and Descriptors (values assigned to the uniforms)
 
@@ -220,8 +255,10 @@ class Project : public BaseProject {
 		MBody.init(this,   &VMesh, "Models/SlotBody.obj", OBJ);
 		MHandle.init(this, &VMesh, "Models/SlotHandle.obj", OBJ);
 		MWheel.init(this,  &VMesh, "Models/SlotWheel.obj", OBJ);
-		MRoom.init(this, &VVColor, "Models/Room.obj", OBJ);
+		MRoom.init(this, &VMesh, "Models/Room.obj", OBJ);
 
+		createSphereMesh(MMars.vertices, MMars.indices);
+		MMars.initMesh(this, &VMesh);
 
 		
 		// Creates a mesh with direct enumeration of vertices and indices
@@ -243,6 +280,7 @@ class Project : public BaseProject {
 		TWheel.init(this,  "textures/SlotWheel.png");
 		TKey.init(this,    "textures/PressSpace.png");
 		TSplash.init(this, "textures/SplashScreen.png");
+		TMars.init(this, "textures/2k_mars.jpg");
 		
 		// Init local variables
 		CamH = 1.0f;
@@ -257,7 +295,6 @@ class Project : public BaseProject {
 		// This creates a new pipeline (with the current surface), using its shaders
 		PMesh.create();
 		POverlay.create();
-		PVColor.create();
 		
 		// Here you define the data set
 		DSBody.init(this, &DSLMesh, {
@@ -286,10 +323,13 @@ class Project : public BaseProject {
 					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
 					{1, TEXTURE, 0, &TWheel}
 				});
-		DSRoom.init(this, &DSLVColor, {
+		DSRoom.init(this, &DSLMesh, {
 					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
 				});
-
+		DSMars.init(this, &DSLMesh, {
+					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+					{1, TEXTURE, 0, &TMars}
+				});
 		DSKey.init(this, &DSLOverlay, {
 					{0, UNIFORM, sizeof(OverlayUniformBlock), nullptr},
 					{1, TEXTURE, 0, &TKey}
@@ -309,7 +349,6 @@ class Project : public BaseProject {
 		// Cleanup pipelines
 		PMesh.cleanup();
 		POverlay.cleanup();
-		PVColor.cleanup();
 
 		// Cleanup datasets
 		DSBody.cleanup();
@@ -318,6 +357,7 @@ class Project : public BaseProject {
 		DSWheel2.cleanup();
 		DSWheel3.cleanup();
 		DSRoom.cleanup();
+		DSMars.cleanup();
 
 		DSKey.cleanup();
 		DSSplash.cleanup();
@@ -335,6 +375,7 @@ class Project : public BaseProject {
 		TWheel.cleanup();
 		TKey.cleanup();
 		TSplash.cleanup();
+		TMars.cleanup();
 		
 		// Cleanup models
 		MBody.cleanup();
@@ -343,18 +384,17 @@ class Project : public BaseProject {
 		MKey.cleanup();
 		MSplash.cleanup();
 		MRoom.cleanup();
+		MMars.cleanup();
 		
 		// Cleanup descriptor set layouts
 		DSLMesh.cleanup();
 		DSLOverlay.cleanup();
-		DSLVColor.cleanup();
 
 		DSLGubo.cleanup();
 		
 		// Destroies the pipelines
 		PMesh.destroy();		
 		POverlay.destroy();
-		PVColor.destroy();
 	}
 	
 	// Here it is the creation of the command buffer:
@@ -404,12 +444,14 @@ class Project : public BaseProject {
 		DSWheel3.bind(commandBuffer, PMesh, 1, currentImage);
 		vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MWheel.indices.size()), 1, 0, 0, 0);
-		DSGubo.bind(commandBuffer, PVColor, 0, currentImage);
-		PVColor.bind(commandBuffer);
 		MRoom.bind(commandBuffer);	
-		DSRoom.bind(commandBuffer, PVColor, 1, currentImage);
+		DSRoom.bind(commandBuffer, PMesh, 1, currentImage);
 		vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MRoom.indices.size()), 1, 0, 0, 0);
+		MMars.bind(commandBuffer);
+		DSMars.bind(commandBuffer, PMesh, 1, currentImage);
+		vkCmdDrawIndexed(commandBuffer,
+				static_cast<uint32_t>(MMars.indices.size()), 1, 0, 0, 0);
 
 		POverlay.bind(commandBuffer);
 		MKey.bind(commandBuffer);
@@ -594,7 +636,9 @@ class Project : public BaseProject {
 
 		glm::vec3 c(World_y* glm::vec4(0, CamH + camDist * sin(CamPitch), camDist* cos(CamPitch), 1));
 		glm::vec3 a(glm::vec3(World* glm::vec4(0, 0, 0, 1)) + glm::vec3(0, CamH, 0));
-		glm::mat4 View = glm::lookAt(c, a, glm::vec3(0, 1, 0));
+		static glm::vec3 u = glm::vec3(0, 1, 0);
+		//u += movSpeed * m.x * deltaT; MARIO GALAXY EFFECT!
+		glm::mat4 View = glm::lookAt(c, a, u);
 
 		//View-projection matrix
 		glm::mat4 ViewPrj = Prj * View;
@@ -645,6 +689,13 @@ class Project : public BaseProject {
 		uboRoom.nMat = glm::inverse(glm::transpose(World));
 		DSRoom.map(currentImage, &uboRoom, sizeof(uboRoom), 0);
 
+		World = glm::translate(glm::mat4(1.0f), glm::vec3(-1.5f, 2.5f, 0.0f));
+		uboMars.amb = 1.0f; uboMars.gamma = 180.0f; uboMars.sColor = glm::vec3(1.0f);
+		uboMars.mvpMat = ViewPrj * World;
+		uboMars.mMat = World;
+		uboMars.nMat = glm::inverse(glm::transpose(World));
+		DSMars.map(currentImage, &uboMars, sizeof(uboMars), 0);
+
 		/* map the uniform data block to the GPU */
 
 
@@ -669,4 +720,75 @@ int main() {
     }
 
     return EXIT_SUCCESS;
+}
+
+void createSphereMesh(std::vector<VertexMesh>& vDef, std::vector<uint32_t>& vIdx) {
+	// The primitive built here is a sphere of radius 1, centered in the origin, on which the Mars texture is applied seamless.
+
+	/*
+	// The procedure fills array vPos with the positions of the vertices and of the normal vectors of the mesh
+	vDef.push_back({{0,0,0}, {0,0,1}, {0,0}});	// vertex 0 - Position, Normal and uv
+	vDef.push_back({{1,0,0}, {0,0,1}, {1,0}});	// vertex 1 - Position and Normal
+	vDef.push_back({{0,1,0}, {0,0,1}, {0,1}});	// vertex 2 - Position and Normal
+	vDef.push_back({{1,1,0}, {0,0,1}, {1,1}});// vertex 3 - Position and Normal
+
+	// The procedures also fill the array vIdx with the indices of the vertices of the triangles
+	vIdx.push_back(0); vIdx.push_back(1); vIdx.push_back(2);	// First triangle
+	vIdx.push_back(1); vIdx.push_back(2); vIdx.push_back(3);	// Second triangle
+	*/
+
+	float d = 2.0f;		//diameter of the sphere (guessed)
+	int rings = 1000;		//resolution of the sphere along y axis (guessed)
+	int slices = 1000;		//resolution of the sphere along x axis (guessed)
+
+	float angle = 0.0f;
+	float beta = glm::radians(180.0f / rings);
+	float curr_y = d / 2 * cos(beta);
+	float h = d / 2 - curr_y;	//height of current spherical cap
+	float r = sqrt(h * (d - h));	// basis radius of current spherical cap
+
+	float x_texture = 0.0f;
+	float y_texture = 1.0f / rings;
+
+	vDef.push_back({ {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} }); // vertex0 - top of the sphere
+	for (int i = 0; i < rings - 1; i++) {
+		for (int j = 0; j < slices; j++) {
+			vDef.push_back({ {cos(angle) * r, curr_y, sin(angle) * r},
+							{cos(angle), cos(beta), sin(angle)},
+							{x_texture, y_texture} }); // vertexes on each ring
+			if (i == 0) {
+				if (j != 0) {
+					vIdx.push_back(0); vIdx.push_back(j + 1); vIdx.push_back(j);
+				}
+				if (j == slices - 1) {
+					vIdx.push_back(0); vIdx.push_back(j + 1); vIdx.push_back(1);
+				}
+			}
+			if (i != 0) {
+				if (j != 0) {
+					vIdx.push_back(slices * i + j + 1); vIdx.push_back(slices * i + j); vIdx.push_back(slices * (i - 1) + j);
+					vIdx.push_back(slices * i + j + 1); vIdx.push_back(slices * (i - 1) + j + 1); vIdx.push_back(slices * (i - 1) + j);
+				}
+				if (j == slices - 1) {
+					vIdx.push_back(slices * i + j + 1); vIdx.push_back(slices * (i - 1) + j + 1); vIdx.push_back(slices * i + 1);
+					vIdx.push_back(slices * (i - 1) + 1); vIdx.push_back(slices * (i - 1) + j + 1); vIdx.push_back(slices * i + 1);
+				}
+			}
+			angle += glm::radians(360.0f / slices);
+			x_texture += 1.0f / slices;
+		}
+		angle = 0.0f;
+		beta += glm::radians(180.0f / rings);
+		curr_y = d / 2 * cos(beta);
+		h = beta > glm::radians(90.0f) ? d / 2 + curr_y : d / 2 - curr_y;
+		r = sqrt(h * (d - h));
+		x_texture = 0.0f;
+		y_texture += 1.0f / rings;
+	}
+
+	vDef.push_back({ {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f} });	// bottom of the sphere
+	for (int j = 1; j < slices; j++) {
+		vIdx.push_back(slices * (rings - 1) + 1); vIdx.push_back(slices * (rings - 2) + j + 1); vIdx.push_back(slices * (rings - 2) + j);
+	}
+	vIdx.push_back(slices * (rings - 1) + 1); vIdx.push_back(slices * (rings - 1)); vIdx.push_back(slices * (rings - 2) + 1);
 }
