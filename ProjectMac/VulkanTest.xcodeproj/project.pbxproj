@@ -294,6 +294,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
 				HEADER_SEARCH_PATHS = (
 					/usr/local/include,
 					/Users/antony/ProjectComputerGraphics/ProjectMac/VulkanTest/headers,
@@ -312,6 +313,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
 				HEADER_SEARCH_PATHS = (
 					/usr/local/include,
 					/Users/antony/ProjectComputerGraphics/ProjectMac/VulkanTest/headers,

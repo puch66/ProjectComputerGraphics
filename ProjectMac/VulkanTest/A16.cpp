@@ -30,6 +30,13 @@ struct GlobalUniformBlock {
 	alignas(16) glm::vec3 AmbLightColor;
 	alignas(16) glm::vec3 eyePos;
 };
+//#################### START SKY ####################
+struct SkyboxUniformBufferObject {
+    alignas(16) glm::mat4 mvpMat;
+    alignas(16) glm::mat4 mMat;
+    alignas(16) glm::mat4 nMat;
+};
+//#################### END SKY ####################
 
 // The vertices data structures
 struct VertexMesh {
@@ -66,6 +73,10 @@ protected:
     /* Add the variable that will contain the required Descriptor Set Layout */
     DescriptorSetLayout DSLVColor;
     
+    //#################### START SKY ####################
+    DescriptorSetLayout DSLskyBox;
+    //#################### END SKY ####################
+    
     // Vertex formats
     VertexDescriptor VMesh;
     VertexDescriptor VOverlay;
@@ -80,6 +91,10 @@ protected:
     /* Add the variable that will contain the new pipeline */
     Pipeline PVColor;
     
+    //#################### START SKY ####################
+    Pipeline PskyBox;
+    //#################### END SKY ####################
+    
     // Models, textures and Descriptors (values assigned to the uniforms)
     // Please note that Model objects depends on the corresponding vertex structure
     Model<VertexMesh> MBody, MHandle, MWheel;
@@ -87,12 +102,21 @@ protected:
     /* Add the variable that will contain the model for the room */
     Model<VertexVColor> MRoom;
     
+    //#################### START SKY ####################
+    Model<VertexMesh> MskyBox;
+    //#################### END SKY ####################
+    
     Model<VertexOverlay> MKey, MSplash;
     DescriptorSet DSGubo, DSBody, DSHandle, DSWheel1, DSWheel2, DSWheel3, DSKey, DSSplash;
     /* A16 */
     /* Add the variable that will contain the Descriptor Set for the room */
     DescriptorSet DSRoom;
-    Texture TBody, THandle, TWheel, TKey, TSplash;
+    
+    //#################### START SKY ####################
+    DescriptorSet DSskyBox;
+    //#################### END SKY ####################
+    
+    Texture TBody, THandle, TWheel, TKey, TSplash, TskyBox;
     
     // C++ storage for uniform variables
     MeshUniformBlock uboBody, uboHandle, uboWheel1, uboWheel2, uboWheel3;
@@ -103,7 +127,12 @@ protected:
     OverlayUniformBlock uboKey, uboSplash;
     
     // Other application parameters
-    float CamH, CamRadius, CamPitch, CamYaw;
+    
+    //#################### START SKY ####################
+    float CamH, CamRadius, CamPitch, CamYaw, CamRoll;
+    glm::mat3 CamDir = glm::mat3(1.0f);
+    //#################### END SKY ####################
+    
     int gameState;
     float HandleRot = 0.0;
     float Wheel1Rot = 0.0;
@@ -123,9 +152,12 @@ protected:
         // Descriptor pool sizes
         /* A16 */
         /* Update the requirements for the size of the pool */
-        uniformBlocksInPool = 9;
-        texturesInPool = 7;
-        setsInPool = 9;
+        
+        //#################### START SKY ####################
+        uniformBlocksInPool = 10;
+        texturesInPool = 8;
+        setsInPool = 10;
+        //#################### END SKY ####################
         
         Ar = (float)windowWidth / (float)windowHeight;
     }
@@ -163,6 +195,13 @@ protected:
         DSLGubo.init(this, {
             {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS}
         });
+        
+        //#################### START SKY ####################
+        DSLskyBox.init(this, {
+                    {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
+                    {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}
+        });
+        //#################### END SKY ####################
         
         // Vertex descriptors
         VMesh.init(this, {
@@ -235,6 +274,12 @@ protected:
         /* Create the new pipeline, using shaders "VColorVert.spv" and "VColorFrag.spv" */
         PVColor.init(this, &VVColor, "shaders/VColorVert.spv", "shaders/VColorFrag.spv", {&DSLGubo, &DSLVColor});
         
+        //#################### START SKY ####################
+        PskyBox.init(this, &VMesh,  "shaders/SkyBoxVert.spv", "shaders/SkyBoxFrag.spv", {&DSLskyBox});
+        PskyBox.setAdvancedFeatures(VK_COMPARE_OP_LESS_OR_EQUAL, VK_POLYGON_MODE_FILL,
+                                     VK_CULL_MODE_BACK_BIT, false);
+        //#################### END SKY ####################
+        
         // Models, textures and Descriptors (values assigned to the uniforms)
         
         // Create models
@@ -244,6 +289,11 @@ protected:
         MBody.init(this,   &VMesh, "Models/SlotBody.obj", OBJ);
         MHandle.init(this, &VMesh, "Models/SlotHandle.obj", OBJ);
         MWheel.init(this,  &VMesh, "Models/SlotWheel.obj", OBJ);
+        
+        //#################### START SKY ####################
+        MskyBox.init(this, &VMesh, "Models/SkyBoxCube.obj", OBJ);
+        //#################### END SKY ####################
+        
         /* A16 */
         /* load the mesh for the room, contained in OBJ file "Room.obj" */
         MRoom.init(this,  &VVColor, "Models/Room.obj", OBJ);
@@ -268,6 +318,13 @@ protected:
         TKey.init(this,    "textures/PressSpace.png");
         TSplash.init(this, "textures/SplashScreen.png");
         
+        //#################### START SKY ####################
+        const char *T2fn[] = {"textures/sky/bkg1_right.png", "textures/sky/bkg1_left.png",
+                              "textures/sky/bkg1_top.png",   "textures/sky/bkg1_bot.png",
+                              "textures/sky/bkg1_front.png", "textures/sky/bkg1_back.png"};
+        TskyBox.initCubic(this, T2fn);
+        //#################### END SKY ####################
+        
         // Init local variables
         CamH = 1.0f;
         //CamRadius = 3.0f;
@@ -281,6 +338,11 @@ protected:
         // This creates a new pipeline (with the current surface), using its shaders
         PMesh.create();
         POverlay.create();
+        
+        //#################### START SKY ####################
+        PskyBox.create();
+        //#################### END SKY ####################
+        
         /* A16 */
         /* Create the new pipeline */
         PVColor.create();
@@ -329,6 +391,14 @@ protected:
         DSGubo.init(this, &DSLGubo, {
             {0, UNIFORM, sizeof(GlobalUniformBlock), nullptr}
         });
+        
+        //#################### START SKY ####################
+        DSskyBox.init(this, &DSLskyBox, {
+            {0, UNIFORM, sizeof(SkyboxUniformBufferObject), nullptr},
+            {1, TEXTURE, 0, &TskyBox}
+        });
+        //#################### END SKY ####################
+        
     }
     
     // Here you destroy your pipelines and Descriptor Sets!
@@ -341,6 +411,11 @@ protected:
         /* cleanup the new pipeline */
         PVColor.cleanup();
         
+        //#################### START SKY ####################
+        PskyBox.cleanup();
+        //#################### END SKY ####################
+        
+        
         // Cleanup datasets
         DSBody.cleanup();
         DSHandle.cleanup();
@@ -350,6 +425,10 @@ protected:
         /* A16 */
         /* cleanup the dataset for the room */
         DSRoom.cleanup();
+        
+        //#################### START SKY ####################
+        DSskyBox.cleanup();
+        //#################### END SKY ####################
         
         DSKey.cleanup();
         DSSplash.cleanup();
@@ -387,12 +466,23 @@ protected:
         
         DSLGubo.cleanup();
         
+        //#################### START SKY ####################
+        TskyBox.cleanup();
+        MskyBox.cleanup();
+        DSLskyBox.cleanup();
+        //#################### END SKY ####################
+        
         // Destroies the pipelines
         PMesh.destroy();
         POverlay.destroy();
         /* A16 */
         /* Destroy the new pipeline */
         PVColor.destroy();
+        
+        //#################### START SKY ####################
+        PskyBox.destroy();
+        //#################### END SKY ####################
+        
     }
     
     // Here it is the creation of the command buffer:
@@ -461,6 +551,14 @@ protected:
         DSSplash.bind(commandBuffer, POverlay, 0, currentImage);
         vkCmdDrawIndexed(commandBuffer,
                          static_cast<uint32_t>(MSplash.indices.size()), 1, 0, 0, 0);
+        
+        //#################### START SKY ####################
+        PskyBox.bind(commandBuffer);
+        MskyBox.bind(commandBuffer);
+        DSskyBox.bind(commandBuffer, PskyBox, 0, currentImage);
+        vkCmdDrawIndexed(commandBuffer,
+                         static_cast<uint32_t>(MskyBox.indices.size()), 1, 0, 0, 0);
+        //#################### END SKY ####################
     }
     
     // Here is where you update the uniforms.
@@ -572,13 +670,65 @@ protected:
         const float farPlane = 100.0f;
         const float rotSpeed = glm::radians(90.0f);
         const float movSpeed = 1.0f;
-        
+        //#################### START SKY ####################
+        const float mouseRes = 10.0f;
+        //#################### END SKY ####################
         const float camDist = 3.0f;
         
         //CamH += m.z * movSpeed * deltaT;
         CamRadius -= m.x * movSpeed * deltaT;
         CamPitch -= r.x * rotSpeed * deltaT;
         CamYaw -= r.y * rotSpeed * deltaT;
+        
+        //#################### START SKY ####################
+        //Ho copia-incollato la gestione di CamDir dall'assignment A00, CamDir dovrebbe poter essere implemntato creando una matrice usando CamYaw, CamRoll e CamPitch ma non ci sono riuscito, infatti è tutto commentato sotto. In questo modo CamDir viene modificato quando il giocatore usa i tasti o il mouse
+        static double old_xpos = 0, old_ypos = 0;
+        double xpos, ypos;
+        glfwGetCursorPos(window, &xpos, &ypos);
+        double m_dx = xpos - old_xpos;
+        double m_dy = ypos - old_ypos;
+        old_xpos = xpos; old_ypos = ypos;
+        glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, GLFW_TRUE);
+        if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+            CamDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
+                               deltaT * (float)m_dx * rotSpeed / mouseRes,
+                               glm::vec3(CamDir[1])) * glm::mat4(CamDir));
+            CamDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
+                               deltaT * (float)m_dy * rotSpeed / mouseRes,
+                               glm::vec3(CamDir[0])) * glm::mat4(CamDir));
+        }
+
+        if(glfwGetKey(window, GLFW_KEY_LEFT)) {
+            CamDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
+                               deltaT * rotSpeed,
+                               glm::vec3(CamDir[1])) * glm::mat4(CamDir));
+        }
+        if(glfwGetKey(window, GLFW_KEY_RIGHT)) {
+            CamDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
+                               -deltaT * rotSpeed,
+                               glm::vec3(CamDir[1])) * glm::mat4(CamDir));
+        }
+        if(glfwGetKey(window, GLFW_KEY_UP)) {
+            CamDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
+                               deltaT * rotSpeed,
+                               glm::vec3(CamDir[0])) * glm::mat4(CamDir));
+        }
+        if(glfwGetKey(window, GLFW_KEY_DOWN)) {
+            CamDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
+                               -deltaT * rotSpeed,
+                               glm::vec3(CamDir[0])) * glm::mat4(CamDir));
+        }
+        if(glfwGetKey(window, GLFW_KEY_Q)) {
+            CamDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
+                               deltaT * rotSpeed,
+                               glm::vec3(CamDir[2])) * glm::mat4(CamDir));
+        }
+        if(glfwGetKey(window, GLFW_KEY_E)) {
+            CamDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
+                               -deltaT * rotSpeed,
+                               glm::vec3(CamDir[2])) * glm::mat4(CamDir));
+        }
+        //#################### END SKY ####################
         
         glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
         Prj[1][1] *= -1;
@@ -588,11 +738,23 @@ protected:
                               sin(CamPitch),
                               cos(CamPitch) * cos(CamYaw));
         
+
         
-       
-        
-        
-        
+        //CamDir = glm::mat4(glm::vec4(cos(CamPitch) * cos(CamYaw),
+        //                             cos(CamPitch) * sin(CamYaw),
+        //                             sin(CamYaw),
+        //                             0),
+        //                   glm::vec4(-sin(CamYaw),
+        //                             cos(CamYaw),
+        //                             0,
+        //                             0),
+        //                   glm::vec4(-sin(CamPitch) * cos(CamYaw),
+        //                             -sin(CamPitch) * sin(CamYaw),
+        //                             cos(CamYaw),
+        //                             0),
+        //                   glm::vec4(camPos,
+        //                             1)
+        //                   );
         
         gubo.DlightDir = glm::normalize(glm::vec3(1, 2, 3));
         gubo.DlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -607,6 +769,25 @@ protected:
         // the fourth parameter is the location inside the descriptor set of this uniform block
         
         static glm::vec3 bodyPos;
+        //#################### START SKY ####################
+        // La World matrix è rimasta la stessa rispetto a prima. Come in A00 viene data la stessa world matrix anche allo sfondo così esso si muove insieme al player e dà l'impressione di essere effettivamente uno sfondo e non una scatola, cosa che effettivamente in realtà è. La Projection matrix (PrjSky) invece è diversa, non so che tipo di projection matrix sia però è copia incollata da A00 e funziona
+        glm::mat4 World = glm::translate(glm::mat4(1.0), glm::vec3(bodyPos))
+                        * glm::rotate(glm::mat4(1.0), CamYaw, glm::vec3(0, 1, 0))
+                        * glm::rotate(glm::mat4(1.0), 0.0f, glm::vec3(1, 0, 0))
+                        * glm::rotate(glm::mat4(1.0), 0.0f, glm::vec3(0, 0, 1))
+                        * glm::scale(glm::mat4(1.0), glm::vec3(1, 1, 1));
+        
+        glm::mat4 PrjSky = glm::perspective(glm::radians(45.0f),
+                        swapChainExtent.width / (float) swapChainExtent.height,
+                        0.1f, 50.0f);
+        PrjSky[1][1] *= -1;
+        
+        SkyboxUniformBufferObject sbubo{};
+        sbubo.mMat = World;
+        sbubo.nMat = glm::inverse(glm::transpose(sbubo.mMat));
+        sbubo.mvpMat = PrjSky * glm::transpose(glm::mat4(CamDir));
+        DSskyBox.map(currentImage, &sbubo, sizeof(sbubo), 0);
+        //#################### END SKY ####################
         
         glm::vec3 ux = glm::vec3(glm::rotate(glm::mat4(1), CamYaw, glm::vec3(0,1,0)) * glm::vec4(1,0,0,1));
         glm::vec3 uy = glm::vec3(0,1,0);
@@ -615,12 +796,6 @@ protected:
         bodyPos += ux * movSpeed * m.x * deltaT;
         bodyPos += uy * movSpeed * m.y * deltaT;
         bodyPos += uz * movSpeed * m.z * deltaT;
-        
-        glm::mat4 World = glm::translate(glm::mat4(1.0), glm::vec3(bodyPos))
-                        * glm::rotate(glm::mat4(1.0), CamYaw, glm::vec3(0, 1, 0))
-                        * glm::rotate(glm::mat4(1.0), 0.0f, glm::vec3(1, 0, 0))
-                        * glm::rotate(glm::mat4(1.0), 0.0f, glm::vec3(0, 0, 1))
-                        * glm::scale(glm::mat4(1.0), glm::vec3(1, 1, 1));
         
         glm::vec3 c = World * glm::vec4(0.0f, CamH + camDist * sin(CamPitch), camDist*cos(CamPitch), 1.0f);
         glm::vec3 a = World * glm::vec4(0.f, 0.0f, 0.0f, 1.0f) + glm::vec4(0.0f, CamH, 0.0f, 0.0f);
