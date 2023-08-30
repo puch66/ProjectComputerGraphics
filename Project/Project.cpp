@@ -143,12 +143,19 @@ class Project : public BaseProject {
 	// Other application parameters
 	float CamH, CamRadius, CamPitch, CamYaw;
 	glm::mat3 SkyBoxDir = glm::mat3(1.0f);
+
+	bool MoveCam = false;
+	glm::vec3 bodyPos;
+	glm::vec3 fixedBodyPos;
+	glm::quat bodyRot;
+	glm::vec3 bodyScale;
+	glm::vec3 CamRadius2;
+
 	int gameState;
 	float HandleRot = 0.0;
 	float Wheel1Rot = 0.0;
 	float Wheel2Rot = 0.0;
 	float Wheel3Rot = 0.0;
-
 
 	// Here you set the main application parameters
 	void setWindowParameters() {
@@ -474,6 +481,10 @@ class Project : public BaseProject {
 		DSMars.bind(commandBuffer, PMesh, 1, currentImage);
 		vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MMars.indices.size()), 1, 0, 0, 0);
+
+		//aggiungere qui nuovi oggetti
+
+
 		PskyBox.bind(commandBuffer);
 		MskyBox.bind(commandBuffer);
 		DSskyBox.bind(commandBuffer, PskyBox, 0, currentImage);
@@ -490,6 +501,7 @@ class Project : public BaseProject {
 		DSSplash.bind(commandBuffer, POverlay, 0, currentImage);
 		vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MSplash.indices.size()), 1, 0, 0, 0);
+
 	}
 
 	// Here is where you update the uniforms.
@@ -505,6 +517,9 @@ class Project : public BaseProject {
 		glm::vec3 m = glm::vec3(0.0f), r = glm::vec3(0.0f);
 		bool fire = false;
 		getSixAxis(deltaT, m, r, fire);
+
+		static float debounce = false;
+		static int curDebounce = 0;
 		// getSixAxis() is defined in Starter.hpp in the base class.
 		// It fills the float point variable passed in its first parameter with the time
 		// since the last call to the procedure.
@@ -609,21 +624,47 @@ class Project : public BaseProject {
 
 		//Current player angle
 		static float yaw = 0.0f;
+		static float fixedYaw = 0.0f;
 		
-		//CamH += m.z * movSpeed * deltaT;
 		const float camDist = 2.0f;
+		
 		CamRadius -= m.x * movSpeed * deltaT;
 		CamPitch -= r.x * rotSpeed * deltaT;
 		if (CamPitch > maxPitch || CamPitch < minPitch) CamPitch = prev_pitch;
 		CamYaw += rotSpeed * r.z * deltaT;
 		yaw -= r.y * rotSpeed * deltaT;
+
+		if (glfwGetKey(window, GLFW_KEY_P)) {
+			if (!debounce) {
+				debounce = true;
+				curDebounce = GLFW_KEY_P;
+				MoveCam = !MoveCam;
+				if(MoveCam) {
+					fixedBodyPos = bodyPos;
+					fixedYaw = yaw;
+				}
+				else {
+					bodyPos = fixedBodyPos;
+					yaw = fixedYaw;
+				}
+				std::cout << "Switch!  " << (MoveCam ? "Camera" : "Key") << "\n";
+			}
+		}
+		else {
+			if ((curDebounce == GLFW_KEY_P) && debounce) {
+				debounce = false;
+				curDebounce = 0;
+				std::cout << "Switch!  " << (MoveCam ? "Cam" : "K") << "\n";
+			}
+		}
+		
 		
 		//Projection matrix
 		glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
 		Prj[1][1] *= -1;
 		glm::vec3 camTarget = glm::vec3(0,CamH,0);
 		glm::vec3 camPos    = camTarget +
-							  CamRadius * glm::vec3(cos(CamPitch) * sin(yaw),
+							  CamRadius2 * glm::vec3(cos(CamPitch) * sin(yaw),
 													sin(CamPitch),
 													cos(CamPitch) * cos(yaw));
 
@@ -639,13 +680,13 @@ class Project : public BaseProject {
 		// the third parameter is its size
 		// the fourth parameter is the location inside the descriptor set of this uniform block
 
-		static glm::vec3 bodyPos;
+		//static glm::vec3 bodyPos;
 
 		// The Walk model update procedure
 		glm::vec3 ux = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(1, 0, 0, 1));
 		glm::vec3 uy = glm::vec3(0, 1, 0);
 		glm::vec3 uz = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(0, 0, -1, 1));
-
+		
 		bodyPos += ux * movSpeed * m.x * deltaT;
 		bodyPos += uy * movSpeed * m.y * deltaT;
 		bodyPos += uz * movSpeed * m.z * deltaT;
@@ -662,7 +703,7 @@ class Project : public BaseProject {
 		glm::vec3 c(World_y* glm::vec4(0, CamH + camDist * sin(CamPitch), camDist* cos(CamPitch), 1));
 		glm::vec3 a(glm::vec3(World* glm::vec4(0, 0, 0, 1)) + glm::vec3(0, CamH, 0));
 		static glm::vec3 u = glm::vec3(0, 1, 0);
-		//u += movSpeed * m.x * deltaT; MARIO GALAXY EFFECT!
+		//u = movSpeed * m.x * deltaT; //MARIO GALAXY EFFECT!
 		glm::mat4 View = glm::lookAt(c, a, u);
 
 		//View-projection matrix
@@ -670,7 +711,14 @@ class Project : public BaseProject {
 
 		//glm::mat4 World = glm::mat4(1);	
 		uboBody.amb = 1.0f; uboBody.gamma = 180.0f; uboBody.sColor = glm::vec3(1.0f);
-		uboBody.mMat = World /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0,1,0))*/;
+		if (!MoveCam) {
+			uboBody.mMat = World /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0,1,0))*/;
+		}
+		else {
+			uboBody.mMat =  glm::translate(glm::mat4(1.0), glm::vec3(fixedBodyPos)) *
+							glm::rotate(glm::mat4(1.0), fixedYaw, glm::vec3(0, 1, 0)) *
+							glm::scale(glm::mat4(1.0), glm::vec3(1.0f));;
+		}
 		uboBody.mvpMat = ViewPrj * uboBody.mMat;
 		uboBody.nMat = glm::inverse(glm::transpose(uboBody.mMat));
 		DSBody.map(currentImage, &uboBody, sizeof(uboBody), 0);
