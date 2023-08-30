@@ -98,6 +98,12 @@ struct VertexOverlay {
 	glm::vec2 UV;
 };
 
+struct SkyboxUniformBufferObject {
+	alignas(16) glm::mat4 mvpMat;
+	alignas(16) glm::mat4 mMat;
+	alignas(16) glm::mat4 nMat;
+};
+
 //functions (to be moved in separate files)
 void createSphereMesh(std::vector<VertexMesh>& vDef, std::vector<uint32_t>& vIdx);
 
@@ -113,28 +119,30 @@ class Project : public BaseProject {
 	//overlay -> triggers
 	//mesh -> objects
 	//gubo -> environment
-	DescriptorSetLayout DSLGubo, DSLMesh, DSLOverlay;
+	DescriptorSetLayout DSLGubo, DSLMesh, DSLOverlay, DSLskyBox;
 
 	// Vertex formats
 	VertexDescriptor VMesh, VOverlay;
 
 	// Pipelines [Shader couples]
-	Pipeline PMesh, POverlay;
+	Pipeline PMesh, POverlay, PskyBox;
 
 	// Models, textures and Descriptors (values assigned to the uniforms)
 	// Please note that Model objects depends on the corresponding vertex structure
-	Model<VertexMesh> MBody, MHandle, MWheel, MRoom, MMars;
+	Model<VertexMesh> MBody, MHandle, MWheel, MMars, MskyBox;
 	Model<VertexOverlay> MKey, MSplash;
-	DescriptorSet DSGubo, DSBody, DSHandle, DSWheel1, DSWheel2, DSWheel3, DSKey, DSSplash, DSRoom, DSMars;
-	Texture TBody, THandle, TWheel, TKey, TSplash, TMars;
+	DescriptorSet DSGubo, DSBody, DSHandle, DSWheel1, DSWheel2, DSWheel3, DSKey, DSSplash, DSMars, DSskyBox;
+	Texture TBody, THandle, TWheel, TKey, TSplash, TMars, TskyBox;
 	
 	// C++ storage for uniform variables
-	MeshUniformBlock uboBody, uboHandle, uboWheel1, uboWheel2, uboWheel3, uboRoom, uboMars;
+	MeshUniformBlock uboBody, uboHandle, uboWheel1, uboWheel2, uboWheel3, uboMars;
+	SkyboxUniformBufferObject uboSky;
 	GlobalUniformBlock gubo;
 	OverlayUniformBlock uboKey, uboSplash;
 
 	// Other application parameters
 	float CamH, CamRadius, CamPitch, CamYaw;
+	glm::mat3 SkyBoxDir = glm::mat3(1.0f);
 	int gameState;
 	float HandleRot = 0.0;
 	float Wheel1Rot = 0.0;
@@ -152,8 +160,8 @@ class Project : public BaseProject {
 		initialBackgroundColor = {0.0f, 0.005f, 0.01f, 1.0f};
 		
 		// Descriptor pool sizes
-		uniformBlocksInPool = 11; //contare gli ubo (perché uno in più? è un bug mio?)
-		texturesInPool = 8; //contare le texture nei ds.init
+		uniformBlocksInPool = 10; //contare gli ubo (perché uno in più? è un bug mio?)
+		texturesInPool = 9; //contare le texture nei ds.init
 		setsInPool = 10; //contare i descriptor set
 		
 		Ar = (float)windowWidth / (float)windowHeight;
@@ -186,6 +194,10 @@ class Project : public BaseProject {
 				
 		DSLGubo.init(this, {
 					{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS}
+				});
+		DSLskyBox.init(this, {
+					{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
+					{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}
 				});
 
 		// Vertex descriptors
@@ -245,6 +257,9 @@ class Project : public BaseProject {
 		POverlay.init(this, &VOverlay, "shaders/OverlayVert.spv", "shaders/OverlayFrag.spv", {&DSLOverlay});
 		POverlay.setAdvancedFeatures(VK_COMPARE_OP_LESS_OR_EQUAL, VK_POLYGON_MODE_FILL,
  								    VK_CULL_MODE_NONE, false);
+		PskyBox.init(this, &VMesh, "shaders/SkyBoxVert.spv", "shaders/SkyBoxFrag.spv", { &DSLskyBox });
+		PskyBox.setAdvancedFeatures(VK_COMPARE_OP_LESS_OR_EQUAL, VK_POLYGON_MODE_FILL,
+			VK_CULL_MODE_BACK_BIT, false);
 
 		// Models, textures and Descriptors (values assigned to the uniforms)
 
@@ -255,7 +270,7 @@ class Project : public BaseProject {
 		MBody.init(this,   &VMesh, "Models/SlotBody.obj", OBJ);
 		MHandle.init(this, &VMesh, "Models/SlotHandle.obj", OBJ);
 		MWheel.init(this,  &VMesh, "Models/SlotWheel.obj", OBJ);
-		MRoom.init(this, &VMesh, "Models/Room.obj", OBJ);
+		MskyBox.init(this, &VMesh, "Models/SkyBoxCube.obj", OBJ);
 
 		createSphereMesh(MMars.vertices, MMars.indices);
 		MMars.initMesh(this, &VMesh);
@@ -281,6 +296,11 @@ class Project : public BaseProject {
 		TKey.init(this,    "textures/PressSpace.png");
 		TSplash.init(this, "textures/SplashScreen.png");
 		TMars.init(this, "textures/2k_mars.jpg");
+
+		const char* T2fn[] = { "textures/sky/bkg1_right.png", "textures/sky/bkg1_left.png",
+							  "textures/sky/bkg1_top.png",   "textures/sky/bkg1_bot.png",
+							  "textures/sky/bkg1_front.png", "textures/sky/bkg1_back.png" };
+		TskyBox.initCubic(this, T2fn);
 		
 		// Init local variables
 		CamH = 1.0f;
@@ -295,6 +315,7 @@ class Project : public BaseProject {
 		// This creates a new pipeline (with the current surface), using its shaders
 		PMesh.create();
 		POverlay.create();
+		PskyBox.create();
 		
 		// Here you define the data set
 		DSBody.init(this, &DSLMesh, {
@@ -323,9 +344,10 @@ class Project : public BaseProject {
 					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
 					{1, TEXTURE, 0, &TWheel}
 				});
-		DSRoom.init(this, &DSLMesh, {
-					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
-				});
+		DSskyBox.init(this, &DSLskyBox, {
+					{0, UNIFORM, sizeof(SkyboxUniformBufferObject), nullptr},
+					{1, TEXTURE, 0, &TskyBox}
+			});
 		DSMars.init(this, &DSLMesh, {
 					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
 					{1, TEXTURE, 0, &TMars}
@@ -341,6 +363,7 @@ class Project : public BaseProject {
 		DSGubo.init(this, &DSLGubo, {
 					{0, UNIFORM, sizeof(GlobalUniformBlock), nullptr}
 				});
+		
 	}
 
 	// Here you destroy your pipelines and Descriptor Sets!
@@ -349,6 +372,7 @@ class Project : public BaseProject {
 		// Cleanup pipelines
 		PMesh.cleanup();
 		POverlay.cleanup();
+		PskyBox.cleanup();
 
 		// Cleanup datasets
 		DSBody.cleanup();
@@ -356,12 +380,12 @@ class Project : public BaseProject {
 		DSWheel1.cleanup();
 		DSWheel2.cleanup();
 		DSWheel3.cleanup();
-		DSRoom.cleanup();
 		DSMars.cleanup();
 
 		DSKey.cleanup();
 		DSSplash.cleanup();
 		DSGubo.cleanup();
+		DSskyBox.cleanup();
 	}
 
 	// Here you destroy all the Models, Texture and Desc. Set Layouts you created!
@@ -376,6 +400,7 @@ class Project : public BaseProject {
 		TKey.cleanup();
 		TSplash.cleanup();
 		TMars.cleanup();
+		TskyBox.cleanup();
 		
 		// Cleanup models
 		MBody.cleanup();
@@ -383,18 +408,19 @@ class Project : public BaseProject {
 		MWheel.cleanup();
 		MKey.cleanup();
 		MSplash.cleanup();
-		MRoom.cleanup();
 		MMars.cleanup();
+		MskyBox.cleanup();
 		
 		// Cleanup descriptor set layouts
 		DSLMesh.cleanup();
 		DSLOverlay.cleanup();
-
+		DSLskyBox.cleanup();
 		DSLGubo.cleanup();
 		
 		// Destroies the pipelines
 		PMesh.destroy();		
 		POverlay.destroy();
+		PskyBox.destroy();
 	}
 	
 	// Here it is the creation of the command buffer:
@@ -444,15 +470,16 @@ class Project : public BaseProject {
 		DSWheel3.bind(commandBuffer, PMesh, 1, currentImage);
 		vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MWheel.indices.size()), 1, 0, 0, 0);
-		MRoom.bind(commandBuffer);	
-		DSRoom.bind(commandBuffer, PMesh, 1, currentImage);
-		vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MRoom.indices.size()), 1, 0, 0, 0);
 		MMars.bind(commandBuffer);
 		DSMars.bind(commandBuffer, PMesh, 1, currentImage);
 		vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MMars.indices.size()), 1, 0, 0, 0);
-
+		PskyBox.bind(commandBuffer);
+		MskyBox.bind(commandBuffer);
+		DSskyBox.bind(commandBuffer, PskyBox, 0, currentImage);
+		vkCmdDrawIndexed(commandBuffer,
+			static_cast<uint32_t>(MskyBox.indices.size()), 1, 0, 0, 0);
+				
 		POverlay.bind(commandBuffer);
 		MKey.bind(commandBuffer);
 		DSKey.bind(commandBuffer, POverlay, 0, currentImage);
@@ -587,6 +614,8 @@ class Project : public BaseProject {
 		const float camDist = 2.0f;
 		CamRadius -= m.x * movSpeed * deltaT;
 		CamPitch -= r.x * rotSpeed * deltaT;
+		if (CamPitch > maxPitch || CamPitch < minPitch) CamPitch = prev_pitch;
+		CamYaw += rotSpeed * r.z * deltaT;
 		yaw -= r.y * rotSpeed * deltaT;
 		
 		//Projection matrix
@@ -597,7 +626,6 @@ class Project : public BaseProject {
 							  CamRadius * glm::vec3(cos(CamPitch) * sin(yaw),
 													sin(CamPitch),
 													cos(CamPitch) * cos(yaw));
-		//glm::mat4 View = glm::lookAt(camPos, camTarget, glm::vec3(0,1,0));
 
 		gubo.DlightDir = glm::normalize(glm::vec3(1, 2, 3));
 		gubo.DlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -628,10 +656,7 @@ class Project : public BaseProject {
 			glm::scale(glm::mat4(1.0), glm::vec3(1.0f));
 
 		//View matrix
-		if (CamPitch > maxPitch || CamPitch < minPitch) CamPitch = prev_pitch;
-
 		//rotate the world matrix on y axis to make the player turn
-		CamYaw += rotSpeed * r.z * deltaT;
 		glm::mat4 World_y = World * glm::rotate(glm::mat4(1.0), CamYaw, glm::vec3(0, 1, 0));
 
 		glm::vec3 c(World_y* glm::vec4(0, CamH + camDist * sin(CamPitch), camDist* cos(CamPitch), 1));
@@ -649,6 +674,30 @@ class Project : public BaseProject {
 		uboBody.mvpMat = ViewPrj * uboBody.mMat;
 		uboBody.nMat = glm::inverse(glm::transpose(uboBody.mMat));
 		DSBody.map(currentImage, &uboBody, sizeof(uboBody), 0);
+
+		//SKYBOX*********************************************************************************
+		if (r.y != 0) {
+			SkyBoxDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
+				-r.y * rotSpeed * deltaT,
+				glm::vec3(SkyBoxDir[1])) * glm::mat4(SkyBoxDir));
+		}
+		if (r.x != 0 && CamPitch != prev_pitch) {
+			SkyBoxDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
+				-r.x * deltaT * rotSpeed,
+				glm::vec3(SkyBoxDir[0])) * glm::mat4(SkyBoxDir));
+		}
+		if (r.z != 0) {
+			SkyBoxDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
+				deltaT * rotSpeed * r.z,
+				glm::vec3(SkyBoxDir[1])) * glm::mat4(SkyBoxDir));
+		}
+
+		//glm::mat4 PrjSky = glm::perspective(glm::radians(45.0f), Ar, 0.1f, 50.0f); PrjSky[1][1] *= -1;
+		uboSky.mMat = World;
+		uboSky.mvpMat = Prj * glm::transpose(glm::mat4(SkyBoxDir));
+		uboSky.nMat = glm::inverse(glm::transpose(uboSky.mMat));
+		DSskyBox.map(currentImage, &uboSky, sizeof(uboSky), 0);
+		//SKYBOX END*********************************************************************/
 	
 		World = glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(0.3f,0.5f,-0.15f)),
 							HandleRot, glm::vec3(1,0,0));
@@ -681,13 +730,6 @@ class Project : public BaseProject {
 		uboWheel3.mMat = World;
 		uboWheel3.nMat = glm::inverse(glm::transpose(World));
 		DSWheel3.map(currentImage, &uboWheel3, sizeof(uboWheel3), 0);
-
-		World = glm::mat4(1);
-		uboRoom.amb = 1.0f; uboRoom.gamma = 180.0f; uboRoom.sColor = glm::vec3(1.0f);
-		uboRoom.mvpMat = Prj * View * World;
-		uboRoom.mMat = World;
-		uboRoom.nMat = glm::inverse(glm::transpose(World));
-		DSRoom.map(currentImage, &uboRoom, sizeof(uboRoom), 0);
 
 		World = glm::translate(glm::mat4(1.0f), glm::vec3(-1.5f, 2.5f, 0.0f));
 		uboMars.amb = 1.0f; uboMars.gamma = 180.0f; uboMars.sColor = glm::vec3(1.0f);
