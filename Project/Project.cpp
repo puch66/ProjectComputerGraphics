@@ -104,9 +104,8 @@ struct SkyboxUniformBufferObject {
 	alignas(16) glm::mat4 nMat;
 };
 
-//functions (to be moved in separate files)
+//function to create mesh
 void createSphereMesh(std::vector<VertexMesh>& vDef, std::vector<uint32_t>& vIdx);
-
 
 // MAIN ! 
 class Project : public BaseProject {
@@ -130,28 +129,35 @@ class Project : public BaseProject {
 	// Models, textures and Descriptors (values assigned to the uniforms)
 	// Please note that Model objects depends on the corresponding vertex structure
 	Model<VertexMesh> MBody, MHandle, MWheel, MMars, MskyBox;
-	Model<VertexOverlay> MKey, MSplash;
-	DescriptorSet DSGubo, DSBody, DSHandle, DSWheel1, DSWheel2, DSWheel3, DSKey, DSSplash, DSMars, DSskyBox;
-	Texture TBody, THandle, TWheel, TKey, TSplash, TMars, TskyBox;
+	Model<VertexOverlay> MGameOver, MSplash, MMenu;
+	DescriptorSet DSGubo, DSBody, DSHandle, DSWheel1, DSWheel2, DSWheel3, DSGameOver, DSSplash, DSMars, DSskyBox, DSMenu;
+	Texture TBody, THandle, TWheel, TGameOver, TSplash, TMars, TskyBox, TMenu;
 	
 	// C++ storage for uniform variables
 	MeshUniformBlock uboBody, uboHandle, uboWheel1, uboWheel2, uboWheel3, uboMars;
 	SkyboxUniformBufferObject uboSky;
 	GlobalUniformBlock gubo;
-	OverlayUniformBlock uboKey, uboSplash;
+	OverlayUniformBlock uboGameOver, uboSplash, uboMenu;
 
 	// Other application parameters
+
+	//camera settings
 	float CamH, CamRadius, CamPitch, CamYaw;
 	glm::mat3 SkyBoxDir = glm::mat3(1.0f);
 
-	bool MoveCam = false;
+	//current player position
 	glm::vec3 bodyPos;
 	glm::vec3 fixedBodyPos;
-	glm::quat bodyRot;
-	glm::vec3 bodyScale;
-	glm::vec3 CamRadius2;
 
+	//handle cursor
+	GLFWcursor* cursor;
+	double xpos, ypos;
+
+	//variable handling the game logic
 	int gameState;
+	bool MoveCam = false;
+
+	//DELETE
 	float HandleRot = 0.0;
 	float Wheel1Rot = 0.0;
 	float Wheel2Rot = 0.0;
@@ -160,16 +166,16 @@ class Project : public BaseProject {
 	// Here you set the main application parameters
 	void setWindowParameters() {
 		// window size, titile and initial background
-		windowWidth = 800;
-		windowHeight = 600;
+		windowWidth = 1200;
+		windowHeight = 800;
 		windowTitle = "Project";
     	windowResizable = GLFW_TRUE;
 		initialBackgroundColor = {0.0f, 0.005f, 0.01f, 1.0f};
 		
 		// Descriptor pool sizes
-		uniformBlocksInPool = 10; //contare gli ubo (perché uno in più? è un bug mio?)
-		texturesInPool = 9; //contare le texture nei ds.init
-		setsInPool = 10; //contare i descriptor set
+		uniformBlocksInPool = 11; //contare gli ubo (perché uno in più? è un bug mio?)
+		texturesInPool = 10; //contare le texture nei ds.init
+		setsInPool = 11; //contare i descriptor set
 		
 		Ar = (float)windowWidth / (float)windowHeight;
 	}
@@ -177,6 +183,8 @@ class Project : public BaseProject {
 	// What to do when the window changes size
 	void onWindowResize(int w, int h) {
 		Ar = (float)w / (float)h;
+		windowWidth = w;
+		windowHeight = h;
 	}
 	
 	// Here you load and setup all your Vulkan Models and Texutures.
@@ -284,25 +292,32 @@ class Project : public BaseProject {
 
 		
 		// Creates a mesh with direct enumeration of vertices and indices
-		MKey.vertices = {{{-0.8f, 0.6f}, {0.0f,0.0f}}, {{-0.8f, 0.95f}, {0.0f,1.0f}},
-						 {{ 0.8f, 0.6f}, {1.0f,0.0f}}, {{ 0.8f, 0.95f}, {1.0f,1.0f}}};
-		MKey.indices = {0, 1, 2,    1, 2, 3};
-		MKey.initMesh(this, &VOverlay);
+		MGameOver.vertices = { {{-1.0f, -1.0f}, {0.0f, 0.0f}}, {{-1.0f, 1.0f}, {0.0f,1.0f}},
+						 {{ 1.0f, -1.0f}, {1.0f,0.0f}}, {{ 1.0f, 1.0f}, {1.0f,1.0f}} };
+		MGameOver.indices = {0, 1, 2,    1, 2, 3};
+		MGameOver.initMesh(this, &VOverlay);
 		
 		// Creates a mesh with direct enumeration of vertices and indices
-		MSplash.vertices = {{{-1.0f, -0.58559f}, {0.0102f, 0.0f}}, {{-1.0f, 0.58559f}, {0.0102f,0.85512f}},
-						 {{ 1.0f,-0.58559f}, {1.0f,0.0f}}, {{ 1.0f, 0.58559f}, {1.0f,0.85512f}}};
+		MSplash.vertices = {{{-1.0f, -1.0f}, {0.0f, 0.0f}}, {{-1.0f, 1.0f}, {0.0f,1.0f}},
+						 {{ 1.0f, -1.0f}, {1.0f,0.0f}}, {{ 1.0f, 1.0f}, {1.0f,1.0f}}};
 		MSplash.indices = {0, 1, 2,    1, 2, 3};
 		MSplash.initMesh(this, &VOverlay);
+
+		// Creates a mesh with direct enumeration of vertices and indices
+		MMenu.vertices = { {{-1.0f, -1.0f}, {0.0f, 0.0f}}, {{-1.0f, 1.0f}, {0.0f,1.0f}},
+						 {{ 1.0f, -1.0f}, {1.0f,0.0f}}, {{ 1.0f, 1.0f}, {1.0f,1.0f}} };
+		MMenu.indices = { 0, 1, 2,    1, 2, 3 };
+		MMenu.initMesh(this, &VOverlay);
 		
 		// Create the textures
 		// The second parameter is the file name
 		TBody.init(this,   "textures/SlotBody.png");
 		THandle.init(this, "textures/SlotHandle.png");
 		TWheel.init(this,  "textures/SlotWheel.png");
-		TKey.init(this,    "textures/PressSpace.png");
+		TGameOver.init(this, "textures/gameover.png");
 		TSplash.init(this, "textures/SplashScreen.png");
 		TMars.init(this, "textures/2k_mars.jpg");
+		TMenu.init(this, "textures/menu.png");
 
 		const char* T2fn[] = { "textures/sky/bkg1_right.png", "textures/sky/bkg1_left.png",
 							  "textures/sky/bkg1_top.png",   "textures/sky/bkg1_bot.png",
@@ -359,14 +374,18 @@ class Project : public BaseProject {
 					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
 					{1, TEXTURE, 0, &TMars}
 				});
-		DSKey.init(this, &DSLOverlay, {
+		DSGameOver.init(this, &DSLOverlay, {
 					{0, UNIFORM, sizeof(OverlayUniformBlock), nullptr},
-					{1, TEXTURE, 0, &TKey}
+					{1, TEXTURE, 0, &TGameOver}
 				});
 		DSSplash.init(this, &DSLOverlay, {
 					{0, UNIFORM, sizeof(OverlayUniformBlock), nullptr},
 					{1, TEXTURE, 0, &TSplash}
 				});
+		DSMenu.init(this, &DSLOverlay, {
+					{0, UNIFORM, sizeof(OverlayUniformBlock), nullptr},
+					{1, TEXTURE, 0, &TMenu}
+			});
 		DSGubo.init(this, &DSLGubo, {
 					{0, UNIFORM, sizeof(GlobalUniformBlock), nullptr}
 				});
@@ -388,8 +407,9 @@ class Project : public BaseProject {
 		DSWheel2.cleanup();
 		DSWheel3.cleanup();
 		DSMars.cleanup();
+		DSMenu.cleanup();
 
-		DSKey.cleanup();
+		DSGameOver.cleanup();
 		DSSplash.cleanup();
 		DSGubo.cleanup();
 		DSskyBox.cleanup();
@@ -404,19 +424,21 @@ class Project : public BaseProject {
 		TBody.cleanup();
 		THandle.cleanup();
 		TWheel.cleanup();
-		TKey.cleanup();
+		TGameOver.cleanup();
 		TSplash.cleanup();
 		TMars.cleanup();
 		TskyBox.cleanup();
+		TMenu.cleanup();
 		
 		// Cleanup models
 		MBody.cleanup();
 		MHandle.cleanup();
 		MWheel.cleanup();
-		MKey.cleanup();
+		MGameOver.cleanup();
 		MSplash.cleanup();
 		MMars.cleanup();
 		MskyBox.cleanup();
+		MMenu.cleanup();
 		
 		// Cleanup descriptor set layouts
 		DSLMesh.cleanup();
@@ -492,15 +514,19 @@ class Project : public BaseProject {
 			static_cast<uint32_t>(MskyBox.indices.size()), 1, 0, 0, 0);
 				
 		POverlay.bind(commandBuffer);
-		MKey.bind(commandBuffer);
-		DSKey.bind(commandBuffer, POverlay, 0, currentImage);
+		MGameOver.bind(commandBuffer);
+		DSGameOver.bind(commandBuffer, POverlay, 0, currentImage);
 		vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MKey.indices.size()), 1, 0, 0, 0);
+				static_cast<uint32_t>(MGameOver.indices.size()), 1, 0, 0, 0);
 
 		MSplash.bind(commandBuffer);
 		DSSplash.bind(commandBuffer, POverlay, 0, currentImage);
 		vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MSplash.indices.size()), 1, 0, 0, 0);
+		MMenu.bind(commandBuffer);
+		DSMenu.bind(commandBuffer, POverlay, 0, currentImage);
+		vkCmdDrawIndexed(commandBuffer,
+			static_cast<uint32_t>(MMenu.indices.size()), 1, 0, 0, 0);
 
 	}
 
@@ -518,23 +544,20 @@ class Project : public BaseProject {
 		bool fire = false;
 		getSixAxis(deltaT, m, r, fire);
 
+		//handle key press debounce
 		static float debounce = false;
 		static int curDebounce = 0;
-		// getSixAxis() is defined in Starter.hpp in the base class.
-		// It fills the float point variable passed in its first parameter with the time
-		// since the last call to the procedure.
-		// It fills vec3 in the second parameters, with three values in the -1,1 range corresponding
-		// to motion (with left stick of the gamepad, or ASWD + RF keys on the keyboard)
-		// It fills vec3 in the third parameters, with three values in the -1,1 range corresponding
-		// to motion (with right stick of the gamepad, or Arrow keys + QE keys on the keyboard, or mouse)
-		// If fills the last boolean variable with true if fire has been pressed:
-		//          SPACE on the keyboard, A or B button on the Gamepad, Right mouse button
 
 		// To debounce the pressing of the fire button, and start the event when the key is released
 		static bool wasFire = false;
 		bool handleFire = (wasFire && (!fire));
 		wasFire = fire;
+
+		//handle cursor
+		glfwGetCursorPos(window, &xpos, &ypos);
+		glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, GLFW_TRUE);
 		
+		//*DELETE**************************************
 		// Parameters: wheels and handle speed and range
 		const float HandleSpeed = glm::radians(90.0f);
 		const float HandleRange = glm::radians(45.0f);
@@ -546,67 +569,113 @@ class Project : public BaseProject {
 		static float Wheel2Rot = 0.0;
 		static float Wheel3Rot = 0.0;
 		static float TargetRot = 0.0;	// Target rotation
+		//*******************************************************/
 
-//std::cout << gameState << "\n";	
 		switch(gameState) {		// main state machine implementation
 		  case 0: // initial state - show splash screen
+			m = glm::vec3(0.0f);
+			r = glm::vec3(0.0f);
 			if(handleFire) {
 				gameState = 1;	// jump to the wait key state
 			}
-			break;
-		  case 1: // wait key state
-			if(handleFire) {
-				gameState = 2;	// jump to the moving handle state
+			if (isInRectangle(0.352, 0.686, 0.674, 0.752)) {
+				buttonPlayLevel(1, &debounce, &curDebounce);
+			}
+			else {
+				cursor = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+				glfwSetCursor(window, cursor);
 			}
 			break;
-		  case 2: // handle moving down state
+		  case 1: // level one
+			if(handleFire) {
+				gameState = 4;	// jump to the moving handle state
+			}
+			break;
+		  case 2: // level two
+			if (handleFire) {
+				gameState = 4;	// jump to the moving handle state
+			}
+			break;
+		  case 3: // pause menu
+			m = glm::vec3(0.0f);
+			r = glm::vec3(0.0f);
+
+			//resume button
+			if (isInRectangle( 0.341, 0.374, 0.657, 0.438)) {
+				buttonPlayLevel(1, &debounce, &curDebounce); //to fix
+			}
+			//level one button
+			else if (isInRectangle(0.341, 0.5194, 0.657, 0.5806)) {
+				buttonPlayLevel(1, &debounce, &curDebounce);
+			}
+			//level two button
+			else if (isInRectangle(0.341, 0.664, 0.657, 0.725)) {
+				buttonPlayLevel(2, &debounce, &curDebounce);
+			}
+			//exit button
+			else if (isInRectangle(0.341, 0.81, 0.657, 0.871)) {
+				cursor = glfwCreateStandardCursor(GLFW_HAND_CURSOR); // GLFW_CROSSHAIR_CURSOR
+				glfwSetCursor(window, cursor);
+				if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+					glfwSetWindowShouldClose(window, GL_TRUE);
+				}
+			}
+			else {
+				cursor = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+				glfwSetCursor(window, cursor);
+			}
+			break;
+
+		//*DELETE****************************************************************
+		  case 4: // 
 			HandleRot += HandleSpeed * deltaT;
 			Wheel1Rot += WheelSpeed * deltaT;
 			Wheel2Rot += WheelSpeed * deltaT;
 			Wheel3Rot += WheelSpeed * deltaT;
 			if(HandleRot > HandleRange) {	// when limit is reached, jump the handle moving up state
-				gameState = 3;
+				gameState = 5;
 				HandleRot = HandleRange;
 			}
 			break;
-		  case 3: // handle moving up state
+		  case 5: // handle moving up state
 			HandleRot -= HandleSpeed * deltaT;
 			Wheel1Rot += WheelSpeed * deltaT;
 			Wheel2Rot += WheelSpeed * deltaT;
 			Wheel3Rot += WheelSpeed * deltaT;
 			if(HandleRot < 0.0f) {	// when limit is reached, jump the 3 wheels spinning state
-				gameState = 4;
+				gameState = 6;
 				HandleRot = 0.0f;
 				TargetRot = Wheel1Rot + (10 + (rand() % 11)) * SymExtent;
 			}
 			break;
-		  case 4: // 3 wheels spinning state
+		  case 6: // 3 wheels spinning state
 			Wheel1Rot += WheelSpeed * deltaT;
 			Wheel2Rot += WheelSpeed * deltaT;
 			Wheel3Rot += WheelSpeed * deltaT;
 //std::cout << Wheel1Rot << " --- " << TargetRot << "\n";
 			if(Wheel1Rot >= TargetRot) {	// When the target rotation is reached, jump to the next state
-				gameState = 5;
+				gameState = 7;
 				Wheel1Rot = round(TargetRot / SymExtent) * SymExtent; // quantize position
 				TargetRot = Wheel2Rot + (10 + (rand() % 11)) * SymExtent;
 			}
 			break;
-		  case 5: // 2 wheels spinning state
+		  case 7: // 2 wheels spinning state
 			Wheel2Rot += WheelSpeed * deltaT;
 			Wheel3Rot += WheelSpeed * deltaT;
 			if(Wheel2Rot >= TargetRot) {	// When the target rotation is reached, jump to the next state
-				gameState = 6;
+				gameState = 8;
 				Wheel2Rot = round(TargetRot / SymExtent) * SymExtent; // quantize position
 				TargetRot = Wheel3Rot + (10 + (rand() % 11)) * SymExtent;
 			}
 			break;
-		  case 6: // 1 wheels spinning state
+		  case 8: // 1 wheels spinning state
 			Wheel3Rot += WheelSpeed * deltaT;
 			if(Wheel3Rot >= TargetRot) {	// When the target rotation is reached, jump to the next state
 				gameState = 1;
 				Wheel3Rot = round(TargetRot / SymExtent) * SymExtent; // quantize position
 			}
 			break;
+			//********************************************************************************/
 		}
 		
 		// Parameters
@@ -633,28 +702,19 @@ class Project : public BaseProject {
 		if (CamPitch > maxPitch || CamPitch < minPitch) CamPitch = prev_pitch;
 		CamYaw += rotSpeed * r.z * deltaT;
 		yaw -= r.y * rotSpeed * deltaT;
+		
+		handleCameraSwitch(&debounce, &curDebounce, &yaw, &fixedYaw);
 
-		if (glfwGetKey(window, GLFW_KEY_P)) {
-			if (!debounce) {
-				debounce = true;
-				curDebounce = GLFW_KEY_P;
-				MoveCam = !MoveCam;
-				if(MoveCam) {
-					fixedBodyPos = bodyPos;
-					fixedYaw = yaw;
-				}
-				else {
-					bodyPos = fixedBodyPos;
-					yaw = fixedYaw;
-				}
-				std::cout << "Switch!  " << (MoveCam ? "Camera" : "Key") << "\n";
-			}
+		//handle enter key press
+		if (glfwGetKey(window, GLFW_KEY_ENTER)) {
+			debounce = true;
+			curDebounce = GLFW_KEY_ENTER;
 		}
 		else {
-			if ((curDebounce == GLFW_KEY_P) && debounce) {
+			if ((curDebounce == GLFW_KEY_ENTER) && debounce) {
 				debounce = false;
 				curDebounce = 0;
-				std::cout << "Switch!  " << (MoveCam ? "Cam" : "K") << "\n";
+				gameState = (gameState == 0 || gameState == 3) ? 1 : 3;
 			}
 		}
 		
@@ -664,7 +724,7 @@ class Project : public BaseProject {
 		Prj[1][1] *= -1;
 		glm::vec3 camTarget = glm::vec3(0,CamH,0);
 		glm::vec3 camPos    = camTarget +
-							  CamRadius2 * glm::vec3(cos(CamPitch) * sin(yaw),
+							  CamRadius * glm::vec3(cos(CamPitch) * sin(yaw),
 													sin(CamPitch),
 													cos(CamPitch) * cos(yaw));
 
@@ -709,7 +769,7 @@ class Project : public BaseProject {
 		//View-projection matrix
 		glm::mat4 ViewPrj = Prj * View;
 
-		//glm::mat4 World = glm::mat4(1);	
+
 		uboBody.amb = 1.0f; uboBody.gamma = 180.0f; uboBody.sColor = glm::vec3(1.0f);
 		if (!MoveCam) {
 			uboBody.mMat = World /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0,1,0))*/;
@@ -717,7 +777,7 @@ class Project : public BaseProject {
 		else {
 			uboBody.mMat =  glm::translate(glm::mat4(1.0), glm::vec3(fixedBodyPos)) *
 							glm::rotate(glm::mat4(1.0), fixedYaw, glm::vec3(0, 1, 0)) *
-							glm::scale(glm::mat4(1.0), glm::vec3(1.0f));;
+							glm::scale(glm::mat4(1.0), glm::vec3(1.0f));
 		}
 		uboBody.mvpMat = ViewPrj * uboBody.mMat;
 		uboBody.nMat = glm::inverse(glm::transpose(uboBody.mMat));
@@ -789,12 +849,66 @@ class Project : public BaseProject {
 		/* map the uniform data block to the GPU */
 
 
-		uboKey.visible = (gameState == 1) ? 1.0f : 0.0f;
-		DSKey.map(currentImage, &uboKey, sizeof(uboKey), 0);
+		uboGameOver.visible = (gameState == 2) ? 1.0f : 0.0f;
+		DSGameOver.map(currentImage, &uboGameOver, sizeof(uboGameOver), 0);
 
 		uboSplash.visible = (gameState == 0) ? 1.0f : 0.0f;
 		DSSplash.map(currentImage, &uboSplash, sizeof(uboSplash), 0);
-	}	
+
+		uboMenu.visible = (gameState == 3) ? 1.0f : 0.0f;
+		DSMenu.map(currentImage, &uboMenu, sizeof(uboMenu), 0);
+	}
+
+	void buttonPlayLevel(int level, float *debounce, int *curDebounce) {
+		cursor = glfwCreateStandardCursor(GLFW_HAND_CURSOR); // GLFW_CROSSHAIR_CURSOR
+		glfwSetCursor(window, cursor);
+		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+			*debounce = true;
+			*curDebounce = GLFW_MOUSE_BUTTON_LEFT;
+		}
+		else {
+			if ((*curDebounce == GLFW_MOUSE_BUTTON_LEFT) && *debounce) {
+				*debounce = false;
+				*curDebounce = 0;
+				cursor = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+				glfwSetCursor(window, cursor);
+				gameState = level;
+			}
+		}
+	}
+
+	bool isInRectangle(float x_left, float y_up, float x_right, float y_down) {
+		float x = xpos / (float)windowWidth;
+		float y = ypos / (float)windowHeight;
+		return  x > x_left && x < x_right && y > y_up && y < y_down;
+	}
+
+	void handleCameraSwitch(float *debounce, int *curDebounce, float *yaw, float *fixedYaw) {
+		if (glfwGetKey(window, GLFW_KEY_P) && !(gameState == 0 || gameState == 3)) {
+			if (!*debounce) {
+				*debounce = true;
+				*curDebounce = GLFW_KEY_P;
+				//std::cout << "Switch!  " << (MoveCam ? "Camera" : "Key") << "\n";
+			}
+		}
+		else {
+			if ((*curDebounce == GLFW_KEY_P) && *debounce) {
+				*debounce = false;
+				*curDebounce = 0;
+				MoveCam = !MoveCam;
+				if (MoveCam) {
+					fixedBodyPos = bodyPos;
+					*fixedYaw = *yaw;
+				}
+				else {
+					bodyPos = fixedBodyPos;
+					*yaw = *fixedYaw;
+				}
+				//std::cout << "Switch!  " << (MoveCam ? "Cam" : "K") << "\n";
+			}
+		}
+	}
+
 };
 
 
