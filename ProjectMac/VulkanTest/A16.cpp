@@ -681,6 +681,11 @@ class Project : public BaseProject {
         // the fourth parameter is the location inside the descriptor set of this uniform block
 
         //static glm::vec3 bodyPos;
+        
+        
+        
+        
+        
 
         // The Walk model update procedure
         glm::vec3 ux = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(1, 0, 0, 1));
