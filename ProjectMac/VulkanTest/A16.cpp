@@ -1,5 +1,6 @@
 // This has been adapted from the Vulkan tutorial
 #include "Starter.hpp"
+#include "TextMaker.hpp"
 
 /* mesh->oggetti
  overlay -> men˘
@@ -65,6 +66,8 @@
  poi, quando viene cambiata scena (es. si preme spazio): RebuildPipeline(); (vedi A12.cpp riga 411)
 
  */
+std::vector<SingleText> levelStatus = {
+   {1, {"Coins collected: 0/20", "", "", ""}, 0, 0}};
 
 struct MeshUniformBlock {
     alignas(4) float amb;
@@ -120,6 +123,8 @@ class Project : public BaseProject {
     //mesh -> objects
     //gubo -> environment
     DescriptorSetLayout DSLGubo, DSLMesh, DSLOverlay, DSLskyBox;
+    
+    TextMaker txt;
 
     // Vertex formats
     VertexDescriptor VMesh, VOverlay;
@@ -168,8 +173,8 @@ class Project : public BaseProject {
         
         // Descriptor pool sizes
         uniformBlocksInPool = 10; //contare gli ubo (perchÈ uno in pi˘? Ë un bug mio?)
-        texturesInPool = 9; //contare le texture nei ds.init
-        setsInPool = 10; //contare i descriptor set
+        texturesInPool = 10; //contare le texture nei ds.init
+        setsInPool = 11; //contare i descriptor set
         
         Ar = (float)windowWidth / (float)windowHeight;
     }
@@ -309,6 +314,8 @@ class Project : public BaseProject {
                               "textures/sky/bkg1_front.png", "textures/sky/bkg1_back.png" };
         TskyBox.initCubic(this, T2fn);
         
+        txt.init(this, &levelStatus);
+        
         // Init local variables
         CamH = 1.0f;
         //CamRadius = 3.0f;
@@ -370,6 +377,7 @@ class Project : public BaseProject {
         DSGubo.init(this, &DSLGubo, {
                     {0, UNIFORM, sizeof(GlobalUniformBlock), nullptr}
                 });
+        txt.pipelinesAndDescriptorSetsInit();
         
     }
 
@@ -393,6 +401,8 @@ class Project : public BaseProject {
         DSSplash.cleanup();
         DSGubo.cleanup();
         DSskyBox.cleanup();
+        
+        txt.pipelinesAndDescriptorSetsCleanup();
     }
 
     // Here you destroy all the Models, Texture and Desc. Set Layouts you created!
@@ -428,6 +438,8 @@ class Project : public BaseProject {
         PMesh.destroy();
         POverlay.destroy();
         PskyBox.destroy();
+        
+        txt.localCleanup();
     }
     
     // Here it is the creation of the command buffer:
@@ -501,6 +513,8 @@ class Project : public BaseProject {
         DSSplash.bind(commandBuffer, POverlay, 0, currentImage);
         vkCmdDrawIndexed(commandBuffer,
                 static_cast<uint32_t>(MSplash.indices.size()), 1, 0, 0, 0);
+        
+        txt.populateCommandBuffer(commandBuffer, currentImage);
 
     }
 
@@ -551,6 +565,8 @@ class Project : public BaseProject {
         switch(gameState) {        // main state machine implementation
           case 0: // initial state - show splash screen
             if(handleFire) {
+                levelStatus = {
+                   {1, {"Coins collected: 1/20", "", "", ""}, 0, 0}};
                 gameState = 1;    // jump to the wait key state
             }
             break;
@@ -681,10 +697,6 @@ class Project : public BaseProject {
         // the fourth parameter is the location inside the descriptor set of this uniform block
 
         //static glm::vec3 bodyPos;
-        
-        
-        
-        
         
 
         // The Walk model update procedure

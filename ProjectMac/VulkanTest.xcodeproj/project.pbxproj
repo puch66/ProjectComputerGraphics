@@ -48,6 +48,7 @@
 		0A2699992A93BE45006F75DA /* textures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = textures; sourceTree = "<group>"; };
 		0A26999A2A93BE45006F75DA /* shaders */ = {isa = PBXFileReference; lastKnownFileType = folder; path = shaders; sourceTree = "<group>"; };
 		0A26999B2A93BE45006F75DA /* A16.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = A16.cpp; sourceTree = "<group>"; };
+		0A3C185E2AA249EE00AEE3B7 /* TextMaker.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = TextMaker.hpp; sourceTree = "<group>"; };
 		0A61779829AD168900383AD1 /* VulkanTest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = VulkanTest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0A6177A329AD172900383AD1 /* libglfw.3.3.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libglfw.3.3.dylib; path = ../../../../../usr/local/lib/libglfw.3.3.dylib; sourceTree = "<group>"; };
 		0A6177A629AD18F200383AD1 /* libvulkan.1.3.239.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libvulkan.1.3.239.dylib; path = ../../../VulkanSDK/1.3.239.0/macOS/lib/libvulkan.1.3.239.dylib; sourceTree = "<group>"; };
@@ -97,6 +98,7 @@
 				0A26999B2A93BE45006F75DA /* A16.cpp */,
 				0A2699962A93BE45006F75DA /* Project checklist - slot macine with room.docx */,
 				0A2699972A93BE45006F75DA /* Starter.hpp */,
+				0A3C185E2AA249EE00AEE3B7 /* TextMaker.hpp */,
 				0A2699942A93BE45006F75DA /* Assignments A16.pdf */,
 			);
 			path = VulkanTest;
