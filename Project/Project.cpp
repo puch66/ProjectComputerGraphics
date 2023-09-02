@@ -1,71 +1,6 @@
 // This has been adapted from the Vulkan tutorial
 #include "Starter.hpp"
 
-/* mesh->oggetti
- overlay -> menù
- gubo -> ambiente
-
- PER AGGIUNGERE UN OGGETTO:
- Model<VertexMesh> MObject; //solo se non è presente già una copia di quell'oggetto
- DescriptorSet DSObject;
- Texture TObject; //solo se non è presente già una copia di quell'oggetto
- MeshUniformBlock uboObject;
-
- uniformBlocksInPool = aumenta di 1;
- texturesInPool = aumenta di 1; //solo se non è presente già una copia di quell'oggetto
- setsInPool = aumenta di 1;
-
- se l'oggetto ha una mesh:
- MBody.init(this,   &VMesh, "Models/ObjectMesh.obj", OBJ);
- se invece vuoi farlo a mano come per gli assignment:
- MObject.vertices = *come negli assignment*
- MObject.indices = *come negli assignment*;
- MObject.initMesh(this, &VMesh);
-
- TObject.init(this,   "textures/ObjectTexture.png");
- DSObject.init(this, &DSLMesh, {
-					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
-					{1, TEXTURE, 0, &TObject}
-				});
- 
- DSObject.cleanup();
- TObject.cleanup();
- MObject.cleanup();
-
- MObject.bind(commandBuffer);
- DSObject.bind(commandBuffer, PMesh, 1, currentImage); //attenti a metterlo vicino agli altri oggetti che usano la stessa pipeline
- vkCmdDrawIndexed(commandBuffer,
-		static_cast<uint32_t>(MObject.indices.size()), 1, 0, 0, 0);
-
- posizionare l'oggetto nel mondo:
- World = ruotare e traslare a piacimento;
- uboObject.amb = 1.0f; uboObject.gamma = 180.0f; uboObject.sColor = glm::vec3(1.0f);
- uboObject.mvpMat = ViewPrj * World;
- uboObject.mMat = World;
- uboObject.nMat = glm::inverse(glm::transpose(World));
- DSObject.map(currentImage, &uboObject, sizeof(uboObject), 0);
-
- PER CREARE UN NUOVO SHADER:
- Pipeline PMeshNew;
- PMeshNew.init(this, &VMesh, "shaders/MeshVert.spv", "shaders/MeshNewFrag.spv", {&DSLGubo, &DSLMesh});
-
- lo shader MeshNewFrag.spv deve essere compilato a partire da uno shader MeshNew.frag
- che deve essere il copia-incolla di Mesh.frag a cui va cambiata la BDRF function
-
- PMeshNew.create();
- PMeshNew.cleanup();
- PMeshNew.destroy();
-
- gli oggetti che vogliono avere il nuovo shader devono avere la pipeline nuova AL POSTO DELLA VECCHIA:
- DSObject.bind(commandBuffer, PNewMesh, 1, currentImage);
-
- PMesh.bind(commandBuffer);
-
- per cambiare dinamicamente la pipeline, basta fare uno switch-case nella populateCommandBuffer (vedi A12.cpp riga 329)
- poi, quando viene cambiata scena (es. si preme spazio): RebuildPipeline(); (vedi A12.cpp riga 411)
-
- */
-
 struct MeshUniformBlock {
 	alignas(4) float amb;
 	alignas(4) float gamma;
@@ -111,6 +46,12 @@ void createSphereMesh(std::vector<VertexMesh>& vDef, std::vector<uint32_t>& vIdx
 class Project : public BaseProject {
 	protected:
 
+	//number of elements for each object
+	static const int n_ground = 4;
+	static const int n_water = 4;
+	static const int n_log = 4;
+	static const int n_tot_assets = n_ground + n_water + n_log;
+
 	// Current aspect ratio (used by the callback that resized the window
 	float Ar;
 
@@ -128,13 +69,14 @@ class Project : public BaseProject {
 
 	// Models, textures and Descriptors (values assigned to the uniforms)
 	// Please note that Model objects depends on the corresponding vertex structure
-	Model<VertexMesh> MBody, MHandle, MWheel, MMars, MskyBox;
+	Model<VertexMesh> MBody, MMars, MskyBox, MGround, MWater, MLog;
 	Model<VertexOverlay> MGameOver, MSplash, MMenu;
-	DescriptorSet DSGubo, DSBody, DSHandle, DSWheel1, DSWheel2, DSWheel3, DSGameOver, DSSplash, DSMars, DSskyBox, DSMenu;
-	Texture TBody, THandle, TWheel, TGameOver, TSplash, TMars, TskyBox, TMenu;
+	DescriptorSet DSGubo, DSBody, DSGameOver, DSSplash, DSMars, DSskyBox, DSMenu;
+	DescriptorSet DSGround[4], DSWater[4], DSLog[4];
+	Texture TAssets, TGameOver, TSplash, TMars, TskyBox, TMenu;
 	
 	// C++ storage for uniform variables
-	MeshUniformBlock uboBody, uboHandle, uboWheel1, uboWheel2, uboWheel3, uboMars;
+	MeshUniformBlock uboBody, uboMars, uboAssets;
 	SkyboxUniformBufferObject uboSky;
 	GlobalUniformBlock gubo;
 	OverlayUniformBlock uboGameOver, uboSplash, uboMenu;
@@ -157,11 +99,13 @@ class Project : public BaseProject {
 	int gameState;
 	bool MoveCam = false;
 
-	//DELETE
-	float HandleRot = 0.0;
-	float Wheel1Rot = 0.0;
-	float Wheel2Rot = 0.0;
-	float Wheel3Rot = 0.0;
+	//world matrix for the objects
+	glm::mat4 GroundWM[n_ground];
+	glm::mat4 WaterWM[n_water];
+	glm::mat4 LogWM[n_log];
+
+	//vectors with the distances to check for the collision
+	const glm::vec3 collision_log = glm::vec3(1.0f, 0.3f, 0.5f);
 
 	// Here you set the main application parameters
 	void setWindowParameters() {
@@ -173,9 +117,9 @@ class Project : public BaseProject {
 		initialBackgroundColor = {0.0f, 0.005f, 0.01f, 1.0f};
 		
 		// Descriptor pool sizes
-		uniformBlocksInPool = 11; //contare gli ubo (perché uno in più? è un bug mio?)
-		texturesInPool = 10; //contare le texture nei ds.init
-		setsInPool = 11; //contare i descriptor set
+		uniformBlocksInPool = 7 + n_tot_assets; //contare gli ubo
+		texturesInPool = 6 + n_tot_assets; //contare le texture nei ds.init
+		setsInPool = 7 + n_tot_assets; //contare i descriptor set
 		
 		Ar = (float)windowWidth / (float)windowHeight;
 	}
@@ -282,10 +226,11 @@ class Project : public BaseProject {
 		// The second parameter is the pointer to the vertex definition for this model
 		// The third parameter is the file name
 		// The last is a constant specifying the file type: currently only OBJ or GLTF
-		MBody.init(this,   &VMesh, "Models/SlotBody.obj", OBJ);
-		MHandle.init(this, &VMesh, "Models/SlotHandle.obj", OBJ);
-		MWheel.init(this,  &VMesh, "Models/SlotWheel.obj", OBJ);
+		MBody.init(this,   &VMesh, "Models/cannon.obj", OBJ);
 		MskyBox.init(this, &VMesh, "Models/SkyBoxCube.obj", OBJ);
+		MGround.init(this, &VMesh, "Models/ground_grass_8.obj", OBJ);
+		MWater.init(this, &VMesh, "Models/water_4.obj", OBJ);
+		MLog.init(this, &VMesh, "Models/wall_spiked_logs.obj", OBJ);
 
 		createSphereMesh(MMars.vertices, MMars.indices);
 		MMars.initMesh(this, &VMesh);
@@ -311,9 +256,7 @@ class Project : public BaseProject {
 		
 		// Create the textures
 		// The second parameter is the file name
-		TBody.init(this,   "textures/SlotBody.png");
-		THandle.init(this, "textures/SlotHandle.png");
-		TWheel.init(this,  "textures/SlotWheel.png");
+		TAssets.init(this,   "textures/palette.png");
 		TGameOver.init(this, "textures/gameover.png");
 		TSplash.init(this, "textures/SplashScreen.png");
 		TMars.init(this, "textures/2k_mars.jpg");
@@ -330,6 +273,21 @@ class Project : public BaseProject {
 		CamPitch = glm::radians(15.f);
 		CamYaw = glm::radians(0.f);
 		gameState = 0;
+
+		GroundWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-2, 0, -2));
+		GroundWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, -2));
+		GroundWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-2, 0, 0));
+		GroundWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, 0));
+
+		WaterWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, 6));
+		WaterWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(2, 0, 6));
+		WaterWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(6, 0, 2));
+		WaterWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(6, 0, 0));
+
+		LogWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(1.5, 0.2, 0));
+		LogWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(0, 0.2, -2));
+		LogWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0.2, 0));
+		LogWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0.2, -2));
 	}
 	
 	// Here you create your pipelines and Descriptor Sets!
@@ -348,23 +306,7 @@ class Project : public BaseProject {
 		// third  element : only for UNIFORMs, the size of the corresponding C++ object. For texture, just put 0
 		// fourth element : only for TEXTUREs, the pointer to the corresponding texture object. For uniforms, use nullptr
 					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
-					{1, TEXTURE, 0, &TBody}
-				});
-		DSHandle.init(this, &DSLMesh, {
-					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
-					{1, TEXTURE, 0, &THandle}
-				});
-		DSWheel1.init(this, &DSLMesh, {
-					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
-					{1, TEXTURE, 0, &TWheel}
-				});
-		DSWheel2.init(this, &DSLMesh, {
-					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
-					{1, TEXTURE, 0, &TWheel}
-				});
-		DSWheel3.init(this, &DSLMesh, {
-					{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
-					{1, TEXTURE, 0, &TWheel}
+					{1, TEXTURE, 0, &TAssets}
 				});
 		DSskyBox.init(this, &DSLskyBox, {
 					{0, UNIFORM, sizeof(SkyboxUniformBufferObject), nullptr},
@@ -389,6 +331,25 @@ class Project : public BaseProject {
 		DSGubo.init(this, &DSLGubo, {
 					{0, UNIFORM, sizeof(GlobalUniformBlock), nullptr}
 				});
+
+		for (int i = 0; i < n_ground; i++) {
+			DSGround[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
+		for (int i = 0; i < n_water; i++) {
+			DSWater[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
+		for (int i = 0; i < n_log; i++) {
+			DSLog[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
 		
 	}
 
@@ -402,13 +363,11 @@ class Project : public BaseProject {
 
 		// Cleanup datasets
 		DSBody.cleanup();
-		DSHandle.cleanup();
-		DSWheel1.cleanup();
-		DSWheel2.cleanup();
-		DSWheel3.cleanup();
 		DSMars.cleanup();
 		DSMenu.cleanup();
-
+		for (int i = 0; i < n_ground; i++) DSGround[i].cleanup();
+		for (int i = 0; i < n_water; i++) DSWater[i].cleanup();
+		for (int i = 0; i < n_log; i++) DSLog[i].cleanup();
 		DSGameOver.cleanup();
 		DSSplash.cleanup();
 		DSGubo.cleanup();
@@ -421,9 +380,7 @@ class Project : public BaseProject {
 	// methods: .cleanup() recreates them, while .destroy() delete them completely
 	void localCleanup() {
 		// Cleanup textures
-		TBody.cleanup();
-		THandle.cleanup();
-		TWheel.cleanup();
+		TAssets.cleanup();
 		TGameOver.cleanup();
 		TSplash.cleanup();
 		TMars.cleanup();
@@ -432,13 +389,14 @@ class Project : public BaseProject {
 		
 		// Cleanup models
 		MBody.cleanup();
-		MHandle.cleanup();
-		MWheel.cleanup();
 		MGameOver.cleanup();
 		MSplash.cleanup();
 		MMars.cleanup();
 		MskyBox.cleanup();
 		MMenu.cleanup();
+		MGround.cleanup();
+		MWater.cleanup();
+		MLog.cleanup();
 		
 		// Cleanup descriptor set layouts
 		DSLMesh.cleanup();
@@ -484,25 +442,31 @@ class Project : public BaseProject {
 		// the second parameter is the number of indexes to be drawn. For a Model object,
 		// this can be retrieved with the .indices.size() method.
 
-		MHandle.bind(commandBuffer);
-		DSHandle.bind(commandBuffer, PMesh, 1, currentImage);
-		vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MHandle.indices.size()), 1, 0, 0, 0);
-
-		MWheel.bind(commandBuffer);
-		DSWheel1.bind(commandBuffer, PMesh, 1, currentImage);
-		vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MWheel.indices.size()), 1, 0, 0, 0);
-		DSWheel2.bind(commandBuffer, PMesh, 1, currentImage);
-		vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MWheel.indices.size()), 1, 0, 0, 0);
-		DSWheel3.bind(commandBuffer, PMesh, 1, currentImage);
-		vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MWheel.indices.size()), 1, 0, 0, 0);
 		MMars.bind(commandBuffer);
 		DSMars.bind(commandBuffer, PMesh, 1, currentImage);
 		vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MMars.indices.size()), 1, 0, 0, 0);
+
+		MGround.bind(commandBuffer);
+		for (int i = 0; i < n_ground; i++) {
+			DSGround[i].bind(commandBuffer, PMesh, 1, currentImage); //attenti a metterlo vicino agli altri oggetti che usano la stessa pipeline
+			vkCmdDrawIndexed(commandBuffer,
+				static_cast<uint32_t>(MGround.indices.size()), 1, 0, 0, 0);
+		}
+
+		MWater.bind(commandBuffer);
+		for (int i = 0; i < n_water; i++) {
+			DSWater[i].bind(commandBuffer, PMesh, 1, currentImage); //attenti a metterlo vicino agli altri oggetti che usano la stessa pipeline
+			vkCmdDrawIndexed(commandBuffer,
+				static_cast<uint32_t>(MWater.indices.size()), 1, 0, 0, 0);
+		}
+
+		MLog.bind(commandBuffer);
+		for (int i = 0; i < n_log; i++) {
+			DSLog[i].bind(commandBuffer, PMesh, 1, currentImage); //attenti a metterlo vicino agli altri oggetti che usano la stessa pipeline
+			vkCmdDrawIndexed(commandBuffer,
+				static_cast<uint32_t>(MLog.indices.size()), 1, 0, 0, 0);
+		}
 
 		//aggiungere qui nuovi oggetti
 
@@ -556,20 +520,6 @@ class Project : public BaseProject {
 		//handle cursor
 		glfwGetCursorPos(window, &xpos, &ypos);
 		glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, GLFW_TRUE);
-		
-		//*DELETE**************************************
-		// Parameters: wheels and handle speed and range
-		const float HandleSpeed = glm::radians(90.0f);
-		const float HandleRange = glm::radians(45.0f);
-		const float WheelSpeed = glm::radians(180.0f);
-		const float SymExtent = glm::radians(15.0f);	// size of one symbol on the wheel in angle rad.
-		// static variables for current angles
-		static float HandleRot = 0.0;
-		static float Wheel1Rot = 0.0;
-		static float Wheel2Rot = 0.0;
-		static float Wheel3Rot = 0.0;
-		static float TargetRot = 0.0;	// Target rotation
-		//*******************************************************/
 
 		switch(gameState) {		// main state machine implementation
 		  case 0: // initial state - show splash screen
@@ -625,57 +575,6 @@ class Project : public BaseProject {
 				glfwSetCursor(window, cursor);
 			}
 			break;
-
-		//*DELETE****************************************************************
-		  case 4: // 
-			HandleRot += HandleSpeed * deltaT;
-			Wheel1Rot += WheelSpeed * deltaT;
-			Wheel2Rot += WheelSpeed * deltaT;
-			Wheel3Rot += WheelSpeed * deltaT;
-			if(HandleRot > HandleRange) {	// when limit is reached, jump the handle moving up state
-				gameState = 5;
-				HandleRot = HandleRange;
-			}
-			break;
-		  case 5: // handle moving up state
-			HandleRot -= HandleSpeed * deltaT;
-			Wheel1Rot += WheelSpeed * deltaT;
-			Wheel2Rot += WheelSpeed * deltaT;
-			Wheel3Rot += WheelSpeed * deltaT;
-			if(HandleRot < 0.0f) {	// when limit is reached, jump the 3 wheels spinning state
-				gameState = 6;
-				HandleRot = 0.0f;
-				TargetRot = Wheel1Rot + (10 + (rand() % 11)) * SymExtent;
-			}
-			break;
-		  case 6: // 3 wheels spinning state
-			Wheel1Rot += WheelSpeed * deltaT;
-			Wheel2Rot += WheelSpeed * deltaT;
-			Wheel3Rot += WheelSpeed * deltaT;
-//std::cout << Wheel1Rot << " --- " << TargetRot << "\n";
-			if(Wheel1Rot >= TargetRot) {	// When the target rotation is reached, jump to the next state
-				gameState = 7;
-				Wheel1Rot = round(TargetRot / SymExtent) * SymExtent; // quantize position
-				TargetRot = Wheel2Rot + (10 + (rand() % 11)) * SymExtent;
-			}
-			break;
-		  case 7: // 2 wheels spinning state
-			Wheel2Rot += WheelSpeed * deltaT;
-			Wheel3Rot += WheelSpeed * deltaT;
-			if(Wheel2Rot >= TargetRot) {	// When the target rotation is reached, jump to the next state
-				gameState = 8;
-				Wheel2Rot = round(TargetRot / SymExtent) * SymExtent; // quantize position
-				TargetRot = Wheel3Rot + (10 + (rand() % 11)) * SymExtent;
-			}
-			break;
-		  case 8: // 1 wheels spinning state
-			Wheel3Rot += WheelSpeed * deltaT;
-			if(Wheel3Rot >= TargetRot) {	// When the target rotation is reached, jump to the next state
-				gameState = 1;
-				Wheel3Rot = round(TargetRot / SymExtent) * SymExtent; // quantize position
-			}
-			break;
-			//********************************************************************************/
 		}
 		
 		// Parameters
@@ -696,6 +595,22 @@ class Project : public BaseProject {
 		static float fixedYaw = 0.0f;
 		
 		const float camDist = 2.0f;
+
+		//handle collisions
+		glm::vec3 tx = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(1, 0, 0, 1));
+		glm::vec3 ty = glm::vec3(0, 1, 0);
+		glm::vec3 tz = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(0, 0, -1, 1));
+		glm::vec3 bodyCollider = glm::vec3(bodyPos + tx * movSpeed * m.x * deltaT + 
+										   ty * movSpeed * m.y * deltaT + 
+										   tz* movSpeed * m.z * deltaT);
+		if (checkCollision(bodyCollider, bodyPos, glm::vec3(LogWM[0][3].x, LogWM[0][3].y, LogWM[0][3].z), collision_log)) {
+			m = glm::vec3(0.0f);
+			r = glm::vec3(0.0f);
+			//std::cout << "COLLISION";
+		}
+		else {
+			std::cout << bodyPos.x << ";" << bodyPos.y << ";" << bodyPos.z << "\n";
+		}
 		
 		CamRadius -= m.x * movSpeed * deltaT;
 		CamPitch -= r.x * rotSpeed * deltaT;
@@ -719,19 +634,7 @@ class Project : public BaseProject {
 		}
 		
 		
-		//Projection matrix
-		glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
-		Prj[1][1] *= -1;
-		glm::vec3 camTarget = glm::vec3(0,CamH,0);
-		glm::vec3 camPos    = camTarget +
-							  CamRadius * glm::vec3(cos(CamPitch) * sin(yaw),
-													sin(CamPitch),
-													cos(CamPitch) * cos(yaw));
-
-		gubo.DlightDir = glm::normalize(glm::vec3(1, 2, 3));
-		gubo.DlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-		gubo.AmbLightColor = glm::vec3(0.1f);
-		gubo.eyePos = camPos;
+		
 
 		// Writes value to the GPU
 		DSGubo.map(currentImage, &gubo, sizeof(gubo), 0);
@@ -765,6 +668,21 @@ class Project : public BaseProject {
 		static glm::vec3 u = glm::vec3(0, 1, 0);
 		//u = movSpeed * m.x * deltaT; //MARIO GALAXY EFFECT!
 		glm::mat4 View = glm::lookAt(c, a, u);
+
+
+		//Projection matrix
+		glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
+		Prj[1][1] *= -1;
+		glm::vec3 camTarget = glm::vec3(0, CamH, 0);
+		glm::vec3 camPos = camTarget +
+			CamRadius * glm::vec3(cos(CamPitch) * sin(yaw),
+				sin(CamPitch),
+				cos(CamPitch) * cos(yaw));
+
+		gubo.DlightDir = glm::normalize(glm::vec3(1, 2, 3));
+		gubo.DlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+		gubo.AmbLightColor = glm::vec3(0.1f);
+		gubo.eyePos = camPos;
 
 		//View-projection matrix
 		glm::mat4 ViewPrj = Prj * View;
@@ -806,38 +724,6 @@ class Project : public BaseProject {
 		uboSky.nMat = glm::inverse(glm::transpose(uboSky.mMat));
 		DSskyBox.map(currentImage, &uboSky, sizeof(uboSky), 0);
 		//SKYBOX END*********************************************************************/
-	
-		World = glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(0.3f,0.5f,-0.15f)),
-							HandleRot, glm::vec3(1,0,0));
-		uboHandle.amb = 1.0f; uboHandle.gamma = 180.0f; uboHandle.sColor = glm::vec3(1.0f);
-		uboHandle.mMat = World;
-		uboHandle.mvpMat = ViewPrj * uboHandle.mMat;
-		uboHandle.nMat = glm::inverse(glm::transpose(uboHandle.mMat));
-		DSHandle.map(currentImage, &uboHandle, sizeof(uboHandle), 0);
-	
-		World = glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(-0.15f,0.93f,-0.15f)),
-							Wheel1Rot, glm::vec3(1,0,0));
-		uboWheel1.amb = 1.0f; uboWheel1.gamma = 180.0f; uboWheel1.sColor = glm::vec3(1.0f);
-		uboWheel1.mvpMat = Prj * View * World;
-		uboWheel1.mMat = World;
-		uboWheel1.nMat = glm::inverse(glm::transpose(World));
-		DSWheel1.map(currentImage, &uboWheel1, sizeof(uboWheel1), 0);
-	
-		World = glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f,0.93f,-0.15f)),
-							Wheel2Rot, glm::vec3(1,0,0));
-		uboWheel2.amb = 1.0f; uboWheel2.gamma = 180.0f; uboWheel2.sColor = glm::vec3(1.0f);
-		uboWheel2.mvpMat = Prj * View * World;
-		uboWheel2.mMat = World;
-		uboWheel2.nMat = glm::inverse(glm::transpose(World));
-		DSWheel2.map(currentImage, &uboWheel2, sizeof(uboWheel2), 0);
-	
-		World = glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(0.15f,0.93f,-0.15f)),
-							Wheel3Rot, glm::vec3(1,0,0));
-		uboWheel3.amb = 1.0f; uboWheel3.gamma = 180.0f; uboWheel3.sColor = glm::vec3(1.0f);
-		uboWheel3.mvpMat = Prj * View * World;
-		uboWheel3.mMat = World;
-		uboWheel3.nMat = glm::inverse(glm::transpose(World));
-		DSWheel3.map(currentImage, &uboWheel3, sizeof(uboWheel3), 0);
 
 		World = glm::translate(glm::mat4(1.0f), glm::vec3(-1.5f, 2.5f, 0.0f));
 		uboMars.amb = 1.0f; uboMars.gamma = 180.0f; uboMars.sColor = glm::vec3(1.0f);
@@ -846,8 +732,28 @@ class Project : public BaseProject {
 		uboMars.nMat = glm::inverse(glm::transpose(World));
 		DSMars.map(currentImage, &uboMars, sizeof(uboMars), 0);
 
-		/* map the uniform data block to the GPU */
+		for (int i = 0; i < n_ground; i++) {
+			uboAssets.mMat = GroundWM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSGround[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
 
+		for (int i = 0; i < n_water; i++) {
+			uboAssets.mMat = WaterWM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSWater[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+
+		for (int i = 0; i < n_log; i++) {
+			uboAssets.mMat = LogWM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSLog[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+
+		/* map the uniform data block to the GPU */
 
 		uboGameOver.visible = (gameState == 2) ? 1.0f : 0.0f;
 		DSGameOver.map(currentImage, &uboGameOver, sizeof(uboGameOver), 0);
@@ -907,6 +813,15 @@ class Project : public BaseProject {
 				//std::cout << "Switch!  " << (MoveCam ? "Cam" : "K") << "\n";
 			}
 		}
+	}
+
+	bool checkCollision(const glm::vec3 box1, const glm::vec3 originalbox, const glm::vec3 box2, const glm::vec3 value) {
+		return  abs(box1 - box2).x <= value.x &&
+				abs(box1 - box2).y <= value.y &&
+				abs(box1 - box2).z <= value.z &&
+				abs(box1 - box2).x <= abs(originalbox - box2).x &&
+				abs(box1 - box2).y <= abs(originalbox - box2).y &&
+				abs(box1 - box2).z <= abs(originalbox - box2).z;
 	}
 
 };
