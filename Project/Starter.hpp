@@ -183,6 +183,7 @@ enum ModelType {OBJ, GLTF};
 
 template <class Vert>
 class Model {
+	public:
 	BaseProject *BP;
 	
 	VkBuffer vertexBuffer;
@@ -191,7 +192,7 @@ class Model {
 	VkDeviceMemory indexBufferMemory;
 	VertexDescriptor *VD;
 
-	public:
+	
 	std::vector<Vert> vertices{};
 	std::vector<uint32_t> indices{};
 	void loadModelOBJ(std::string file);

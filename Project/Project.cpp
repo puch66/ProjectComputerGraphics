@@ -1,5 +1,6 @@
 // This has been adapted from the Vulkan tutorial
 #include "Starter.hpp"
+#include "TextMaker.hpp"
 
 struct MeshUniformBlock {
 	alignas(4) float amb;
@@ -39,12 +40,21 @@ struct SkyboxUniformBufferObject {
 	alignas(16) glm::mat4 nMat;
 };
 
+
+
 //function to create mesh
 void createSphereMesh(std::vector<VertexMesh>& vDef, std::vector<uint32_t>& vIdx);
 
 // MAIN ! 
 class Project : public BaseProject {
 	protected:
+	//text
+	std::vector<SingleText> levelStatus = {
+		{1, {"", "", "", ""}, 0, 0},
+		{1, {"Coins collected: 0/20", "", "", ""}, 0, 0},
+		{1, {"Coins collected: 1/20", "", "", ""}, 0, 0}
+	};
+	int curText;
 
 	//number of elements for each object
 	static const int n_ground = 4;
@@ -63,6 +73,9 @@ class Project : public BaseProject {
 
 	// Vertex formats
 	VertexDescriptor VMesh, VOverlay;
+
+	//text
+	TextMaker txt;
 
 	// Pipelines [Shader couples]
 	Pipeline PMesh, POverlay, PskyBox;
@@ -117,9 +130,9 @@ class Project : public BaseProject {
 		initialBackgroundColor = {0.0f, 0.005f, 0.01f, 1.0f};
 		
 		// Descriptor pool sizes
-		uniformBlocksInPool = 7 + n_tot_assets; //contare gli ubo
-		texturesInPool = 6 + n_tot_assets; //contare le texture nei ds.init
-		setsInPool = 7 + n_tot_assets; //contare i descriptor set
+		uniformBlocksInPool = 8 + n_tot_assets; //contare gli ubo
+		texturesInPool = 7 + n_tot_assets; //contare le texture nei ds.init
+		setsInPool = 8 + n_tot_assets; //contare i descriptor set
 		
 		Ar = (float)windowWidth / (float)windowHeight;
 	}
@@ -262,6 +275,8 @@ class Project : public BaseProject {
 		TMars.init(this, "textures/2k_mars.jpg");
 		TMenu.init(this, "textures/menu.png");
 
+		txt.init(this, &levelStatus);
+
 		const char* T2fn[] = { "textures/sky/bkg1_right.png", "textures/sky/bkg1_left.png",
 							  "textures/sky/bkg1_top.png",   "textures/sky/bkg1_bot.png",
 							  "textures/sky/bkg1_front.png", "textures/sky/bkg1_back.png" };
@@ -273,6 +288,7 @@ class Project : public BaseProject {
 		CamPitch = glm::radians(15.f);
 		CamYaw = glm::radians(0.f);
 		gameState = 0;
+		curText = 0;
 
 		GroundWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-2, 0, -2));
 		GroundWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, -2));
@@ -284,7 +300,7 @@ class Project : public BaseProject {
 		WaterWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(6, 0, 2));
 		WaterWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(6, 0, 0));
 
-		LogWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(1.5, 0.2, 0));
+		LogWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(1.5, 0.2, 1.0));
 		LogWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(0, 0.2, -2));
 		LogWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0.2, 0));
 		LogWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0.2, -2));
@@ -350,6 +366,8 @@ class Project : public BaseProject {
 						{1, TEXTURE, 0, &TAssets}
 				});
 		}
+
+		txt.pipelinesAndDescriptorSetsInit();
 		
 	}
 
@@ -372,6 +390,8 @@ class Project : public BaseProject {
 		DSSplash.cleanup();
 		DSGubo.cleanup();
 		DSskyBox.cleanup();
+
+		txt.pipelinesAndDescriptorSetsCleanup();
 	}
 
 	// Here you destroy all the Models, Texture and Desc. Set Layouts you created!
@@ -403,6 +423,8 @@ class Project : public BaseProject {
 		DSLOverlay.cleanup();
 		DSLskyBox.cleanup();
 		DSLGubo.cleanup();
+
+		txt.localCleanup();
 		
 		// Destroies the pipelines
 		PMesh.destroy();		
@@ -492,6 +514,8 @@ class Project : public BaseProject {
 		vkCmdDrawIndexed(commandBuffer,
 			static_cast<uint32_t>(MMenu.indices.size()), 1, 0, 0, 0);
 
+		txt.populateCommandBuffer(commandBuffer, currentImage, curText);
+
 	}
 
 	// Here is where you update the uniforms.
@@ -527,6 +551,8 @@ class Project : public BaseProject {
 			r = glm::vec3(0.0f);
 			if(handleFire) {
 				gameState = 1;	// jump to the wait key state
+				curText++;
+				RebuildPipeline();
 			}
 			if (isInRectangle(0.352, 0.686, 0.674, 0.752)) {
 				buttonPlayLevel(1, &debounce, &curDebounce);
@@ -609,7 +635,7 @@ class Project : public BaseProject {
 			//std::cout << "COLLISION";
 		}
 		else {
-			std::cout << bodyPos.x << ";" << bodyPos.y << ";" << bodyPos.z << "\n";
+			//std::cout << bodyPos.x << ";" << bodyPos.y << ";" << bodyPos.z << "\n";
 		}
 		
 		CamRadius -= m.x * movSpeed * deltaT;
@@ -630,6 +656,8 @@ class Project : public BaseProject {
 				debounce = false;
 				curDebounce = 0;
 				gameState = (gameState == 0 || gameState == 3) ? 1 : 3;
+				curText = (gameState == 0 || gameState == 3) ? 0 : 1;
+				RebuildPipeline();
 			}
 		}
 		
@@ -779,6 +807,8 @@ class Project : public BaseProject {
 				cursor = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
 				glfwSetCursor(window, cursor);
 				gameState = level;
+				curText = (level == 0 || level == 3) ? 0:1;
+				RebuildPipeline();
 			}
 		}
 	}
@@ -819,9 +849,8 @@ class Project : public BaseProject {
 		return  abs(box1 - box2).x <= value.x &&
 				abs(box1 - box2).y <= value.y &&
 				abs(box1 - box2).z <= value.z &&
-				abs(box1 - box2).x <= abs(originalbox - box2).x &&
-				abs(box1 - box2).y <= abs(originalbox - box2).y &&
-				abs(box1 - box2).z <= abs(originalbox - box2).z;
+				sqrt(pow((box1 - box2).x, 2) + pow((box1 - box2).y, 2) + pow((box1 - box2).z, 2)) <=
+				sqrt(pow((originalbox - box2).x, 2) + pow((originalbox - box2).y, 2) + pow((originalbox - box2).z, 2));
 	}
 
 };
