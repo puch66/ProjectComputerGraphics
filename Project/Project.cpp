@@ -51,16 +51,20 @@ class Project : public BaseProject {
 	//text
 	std::vector<SingleText> levelStatus = {
 		{1, {"", "", "", ""}, 0, 0},
-		{1, {"Coins collected: 0/20", "", "", ""}, 0, 0},
-		{1, {"Coins collected: 1/20", "", "", ""}, 0, 0}
+		{1, {"Coins collected: 0/5", "", "", ""}, 0, 0},
+		{1, {"Coins collected: 1/5", "", "", ""}, 0, 0},
+		{1, {"Coins collected: 2/5", "", "", ""}, 0, 0},
+		{1, {"Coins collected: 3/5", "", "", ""}, 0, 0},
+		{1, {"Coins collected: 4/5", "", "", ""}, 0, 0}
 	};
 	int curText;
 
 	//number of elements for each object
-	static const int n_ground = 4;
-	static const int n_water = 4;
-	static const int n_log = 4;
-	static const int n_tot_assets = n_ground + n_water + n_log;
+	static const int n_ground = 9;
+	static const int n_water = 2;
+	static const int n_log = 7;
+	static const int n_coin = 5;
+	static const int n_tot_assets = n_ground + n_water + n_log + n_coin;
 
 	// Current aspect ratio (used by the callback that resized the window
 	float Ar;
@@ -82,10 +86,10 @@ class Project : public BaseProject {
 
 	// Models, textures and Descriptors (values assigned to the uniforms)
 	// Please note that Model objects depends on the corresponding vertex structure
-	Model<VertexMesh> MBody, MMars, MskyBox, MGround, MWater, MLog;
+	Model<VertexMesh> MBody, MMars, MskyBox, MGround, MWater, MLog, MCoin;
 	Model<VertexOverlay> MGameOver, MSplash, MMenu;
 	DescriptorSet DSGubo, DSBody, DSGameOver, DSSplash, DSMars, DSskyBox, DSMenu;
-	DescriptorSet DSGround[4], DSWater[4], DSLog[4];
+	DescriptorSet DSGround[n_ground], DSWater[n_water], DSLog[n_log], DSCoin[n_coin];
 	Texture TAssets, TGameOver, TSplash, TMars, TskyBox, TMenu;
 	
 	// C++ storage for uniform variables
@@ -98,6 +102,7 @@ class Project : public BaseProject {
 
 	//camera settings
 	float CamH, CamRadius, CamPitch, CamYaw;
+	float yaw;
 	glm::mat3 SkyBoxDir = glm::mat3(1.0f);
 
 	//current player position
@@ -110,15 +115,20 @@ class Project : public BaseProject {
 
 	//variable handling the game logic
 	int gameState;
-	bool MoveCam = false;
+	int currentLevel;
+	bool MoveCam;
+	int coinsCollected;
 
 	//world matrix for the objects
 	glm::mat4 GroundWM[n_ground];
 	glm::mat4 WaterWM[n_water];
 	glm::mat4 LogWM[n_log];
+	glm::mat4 CoinWM[n_coin];
 
 	//vectors with the distances to check for the collision
 	const glm::vec3 collision_log = glm::vec3(1.0f, 0.3f, 0.5f);
+	const glm::vec3 collision_log_rotated = glm::vec3(0.5f, 0.3f, 1.0f);
+	const glm::vec3 collision_coin = glm::vec3(0.7f, 1.0f, 0.7f);
 
 	// Here you set the main application parameters
 	void setWindowParameters() {
@@ -244,6 +254,7 @@ class Project : public BaseProject {
 		MGround.init(this, &VMesh, "Models/ground_grass_8.obj", OBJ);
 		MWater.init(this, &VMesh, "Models/water_4.obj", OBJ);
 		MLog.init(this, &VMesh, "Models/wall_spiked_logs.obj", OBJ);
+		MCoin.init(this, &VMesh, "Models/coin.obj", OBJ);
 
 		createSphereMesh(MMars.vertices, MMars.indices);
 		MMars.initMesh(this, &VMesh);
@@ -284,26 +295,44 @@ class Project : public BaseProject {
 		
 		// Init local variables
 		CamH = 1.0f;
-		//CamRadius = 3.0f;
 		CamPitch = glm::radians(15.f);
 		CamYaw = glm::radians(0.f);
+		yaw = 0.0f;
 		gameState = 0;
+		currentLevel = 0;
+		MoveCam = false;
 		curText = 0;
+		coinsCollected = 0;
 
-		GroundWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-2, 0, -2));
-		GroundWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, -2));
-		GroundWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-2, 0, 0));
-		GroundWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, 0));
+		GroundWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, 0));
+		GroundWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, -8));
+		GroundWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-8, 0, -8));
+		GroundWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-8, 0, 0));
+		GroundWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(8, 0, 0));
+		GroundWM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-8, 0, 8));
+		GroundWM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(8, 0, -8));
+		GroundWM[7] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(8, 0, 8));
+		GroundWM[8] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, 8));
 
-		WaterWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, 6));
-		WaterWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(2, 0, 6));
-		WaterWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(6, 0, 2));
-		WaterWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(6, 0, 0));
+		WaterWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.5f, 1.0f, 1.5f)), glm::vec3(0, 0, -60));
+		WaterWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(20, 0, 60));
 
-		LogWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(1.5, 0.2, 1.0));
-		LogWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(0, 0.2, -2));
-		LogWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0.2, 0));
-		LogWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0.2, -2));
+		LogWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5, 0.2, 0)) *
+			glm::rotate(glm::mat4(1.0), 90.f, glm::vec3(0, 1, 0));
+		LogWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(40, 0.2, -20));
+		LogWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(39, 0.2, -20));
+		LogWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28, 0.2, 8)) *
+			glm::rotate(glm::mat4(1.0), 90.f, glm::vec3(0, 1, 0));
+		LogWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28.8, 0.2, 7.5));
+		LogWM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12, 0.2, -8))
+			* glm::rotate(glm::mat4(1.0), 45.f, glm::vec3(0, 1, 0));
+		LogWM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5, 0.2, 18));
+
+		CoinWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5.7f, 0.7f, 0));
+		CoinWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(39.5, 0.7, -21));
+		CoinWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28.7, 0.7, 8.2));
+		CoinWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12.5, 0.7, -8.6));
+		CoinWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5.15, 0.7, 18.5));
 	}
 	
 	// Here you create your pipelines and Descriptor Sets!
@@ -366,6 +395,12 @@ class Project : public BaseProject {
 						{1, TEXTURE, 0, &TAssets}
 				});
 		}
+		for (int i = 0; i < n_coin; i++) {
+			DSCoin[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
 
 		txt.pipelinesAndDescriptorSetsInit();
 		
@@ -386,6 +421,7 @@ class Project : public BaseProject {
 		for (int i = 0; i < n_ground; i++) DSGround[i].cleanup();
 		for (int i = 0; i < n_water; i++) DSWater[i].cleanup();
 		for (int i = 0; i < n_log; i++) DSLog[i].cleanup();
+		for (int i = 0; i < n_coin; i++) DSCoin[i].cleanup();
 		DSGameOver.cleanup();
 		DSSplash.cleanup();
 		DSGubo.cleanup();
@@ -417,6 +453,7 @@ class Project : public BaseProject {
 		MGround.cleanup();
 		MWater.cleanup();
 		MLog.cleanup();
+		MCoin.cleanup();
 		
 		// Cleanup descriptor set layouts
 		DSLMesh.cleanup();
@@ -490,6 +527,13 @@ class Project : public BaseProject {
 				static_cast<uint32_t>(MLog.indices.size()), 1, 0, 0, 0);
 		}
 
+		MCoin.bind(commandBuffer);
+		for (int i = 0; i < n_coin; i++) {
+			DSCoin[i].bind(commandBuffer, PMesh, 1, currentImage); //attenti a metterlo vicino agli altri oggetti che usano la stessa pipeline
+			vkCmdDrawIndexed(commandBuffer,
+				static_cast<uint32_t>(MCoin.indices.size()), 1, 0, 0, 0);
+		}
+
 		//aggiungere qui nuovi oggetti
 
 
@@ -541,6 +585,10 @@ class Project : public BaseProject {
 		bool handleFire = (wasFire && (!fire));
 		wasFire = fire;
 
+		//coin rotation speed
+		const float coinSpeed = glm::radians(120.0f);
+		static float coinAngle = 0.0f;
+
 		//handle cursor
 		glfwGetCursorPos(window, &xpos, &ypos);
 		glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, GLFW_TRUE);
@@ -551,11 +599,12 @@ class Project : public BaseProject {
 			r = glm::vec3(0.0f);
 			if(handleFire) {
 				gameState = 1;	// jump to the wait key state
+				currentLevel = 1;
 				curText++;
 				RebuildPipeline();
 			}
 			if (isInRectangle(0.352, 0.686, 0.674, 0.752)) {
-				buttonPlayLevel(1, &debounce, &curDebounce);
+				buttonPlayLevel(1, &debounce, &curDebounce, false);
 			}
 			else {
 				cursor = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
@@ -563,6 +612,8 @@ class Project : public BaseProject {
 			}
 			break;
 		  case 1: // level one
+			// handle coin rotation
+			coinAngle += coinSpeed * deltaT;
 			if(handleFire) {
 				gameState = 4;	// jump to the moving handle state
 			}
@@ -578,15 +629,15 @@ class Project : public BaseProject {
 
 			//resume button
 			if (isInRectangle( 0.341, 0.374, 0.657, 0.438)) {
-				buttonPlayLevel(1, &debounce, &curDebounce); //to fix
+				buttonPlayLevel(currentLevel, &debounce, &curDebounce, true);
 			}
 			//level one button
 			else if (isInRectangle(0.341, 0.5194, 0.657, 0.5806)) {
-				buttonPlayLevel(1, &debounce, &curDebounce);
+				buttonPlayLevel(1, &debounce, &curDebounce, false);
 			}
 			//level two button
 			else if (isInRectangle(0.341, 0.664, 0.657, 0.725)) {
-				buttonPlayLevel(2, &debounce, &curDebounce);
+				buttonPlayLevel(2, &debounce, &curDebounce, false);
 			}
 			//exit button
 			else if (isInRectangle(0.341, 0.81, 0.657, 0.871)) {
@@ -609,7 +660,7 @@ class Project : public BaseProject {
 		const float nearPlane = 0.1f;
 		const float farPlane = 100.0f;
 		const float rotSpeed = glm::radians(120.0f);
-		const float movSpeed = 2.0f;
+		const float movSpeed = 4.0f;
 
 		// Camera Pitch limits
 		const float minPitch = glm::radians(-8.75f);
@@ -617,7 +668,6 @@ class Project : public BaseProject {
 		float prev_pitch = CamPitch;
 
 		//Current player angle
-		static float yaw = 0.0f;
 		static float fixedYaw = 0.0f;
 		
 		const float camDist = 2.0f;
@@ -629,13 +679,30 @@ class Project : public BaseProject {
 		glm::vec3 bodyCollider = glm::vec3(bodyPos + tx * movSpeed * m.x * deltaT + 
 										   ty * movSpeed * m.y * deltaT + 
 										   tz* movSpeed * m.z * deltaT);
-		if (checkCollision(bodyCollider, bodyPos, glm::vec3(LogWM[0][3].x, LogWM[0][3].y, LogWM[0][3].z), collision_log)) {
-			m = glm::vec3(0.0f);
-			r = glm::vec3(0.0f);
-			//std::cout << "COLLISION";
+		for (int i = 0; i < n_log; i++) {
+			if (checkCollision(bodyCollider, bodyPos, glm::vec3(LogWM[i][3].x, LogWM[i][3].y, LogWM[i][3].z), collision_log)) {
+				m = glm::vec3(0.0f);
+				r = glm::vec3(0.0f);
+				//std::cout << "COLLISION";
+			}
 		}
-		else {
-			//std::cout << bodyPos.x << ";" << bodyPos.y << ";" << bodyPos.z << "\n";
+		for (int i = 0; i < n_coin; i++) {
+			if (checkCollision(bodyCollider, bodyPos, glm::vec3(CoinWM[i][3].x, CoinWM[i][3].y, CoinWM[i][3].z), collision_coin)) {
+				CoinWM[i] = glm::translate(glm::scale(glm::mat4(0.0f), glm::vec3(1.0f)), glm::vec3(0.0f));
+				coinsCollected++;
+				if (coinsCollected == 5) {
+					coinsCollected = 0;
+					gameState = 2;
+					currentLevel = 2;
+					curText = 0;
+					RebuildPipeline();
+				}
+				else {
+					curText = coinsCollected + 1;
+					RebuildPipeline();
+				}
+				//std::cout << "COLLISION";
+			}
 		}
 		
 		CamRadius -= m.x * movSpeed * deltaT;
@@ -781,6 +848,13 @@ class Project : public BaseProject {
 			DSLog[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
 		}
 
+		for (int i = 0; i < n_coin; i++) {
+			uboAssets.mMat = CoinWM[i] * glm::rotate(glm::mat4(1.0), coinAngle, glm::vec3(0, 1, 0));
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSCoin[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+
 		/* map the uniform data block to the GPU */
 
 		uboGameOver.visible = (gameState == 2) ? 1.0f : 0.0f;
@@ -793,7 +867,7 @@ class Project : public BaseProject {
 		DSMenu.map(currentImage, &uboMenu, sizeof(uboMenu), 0);
 	}
 
-	void buttonPlayLevel(int level, float *debounce, int *curDebounce) {
+	void buttonPlayLevel(int level, float *debounce, int *curDebounce, bool resume) {
 		cursor = glfwCreateStandardCursor(GLFW_HAND_CURSOR); // GLFW_CROSSHAIR_CURSOR
 		glfwSetCursor(window, cursor);
 		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
@@ -807,7 +881,24 @@ class Project : public BaseProject {
 				cursor = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
 				glfwSetCursor(window, cursor);
 				gameState = level;
-				curText = (level == 0 || level == 3) ? 0:1;
+				if (level == 1 || level == 2) {
+					currentLevel = level;
+					if (!resume) {
+						bodyPos = glm::vec3(0.0f);
+						CamPitch = glm::radians(15.f);
+						CamYaw = glm::radians(0.0f);
+						yaw = 0.0f;
+					}
+				}
+				if (level == 1 && !resume) {
+					coinsCollected = 0;
+					CoinWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5.7f, 0.7f, 0));
+					CoinWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(39.5, 0.7, -21));
+					CoinWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28.7, 0.7, 8.2));
+					CoinWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12.5, 0.7, -8.6));
+					CoinWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5.15, 0.7, 18.5));
+				}
+				curText = (level != 1) ? 0: coinsCollected + 1;
 				RebuildPipeline();
 			}
 		}
