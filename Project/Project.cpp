@@ -288,9 +288,9 @@ class Project : public BaseProject {
 
 		txt.init(this, &levelStatus);
 
-		const char* T2fn[] = { "textures/sky/bkg1_right.png", "textures/sky/bkg1_left.png",
-							  "textures/sky/bkg1_top.png",   "textures/sky/bkg1_bot.png",
-							  "textures/sky/bkg1_front.png", "textures/sky/bkg1_back.png" };
+		const char* T2fn[] = { "textures/sky2/bkg1_right.png", "textures/sky2/bkg1_left.png",
+							  "textures/sky2/bkg1_top.png",   "textures/sky2/bkg1_bot.png",
+							  "textures/sky2/bkg1_front.png", "textures/sky2/bkg1_back.png" };
 		TskyBox.initCubic(this, T2fn);
 		
 		// Init local variables
@@ -796,29 +796,12 @@ class Project : public BaseProject {
 		uboBody.nMat = glm::inverse(glm::transpose(uboBody.mMat));
 		DSBody.map(currentImage, &uboBody, sizeof(uboBody), 0);
 
-		//SKYBOX*********************************************************************************
-		if (r.y != 0) {
-			SkyBoxDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
-				-r.y * rotSpeed * deltaT,
-				glm::vec3(SkyBoxDir[1])) * glm::mat4(SkyBoxDir));
-		}
-		if (r.x != 0 && CamPitch != prev_pitch) {
-			SkyBoxDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
-				-r.x * deltaT * rotSpeed,
-				glm::vec3(SkyBoxDir[0])) * glm::mat4(SkyBoxDir));
-		}
-		if (r.z != 0) {
-			SkyBoxDir = glm::mat3(glm::rotate(glm::mat4(1.0f),
-				deltaT * rotSpeed * r.z,
-				glm::vec3(SkyBoxDir[1])) * glm::mat4(SkyBoxDir));
-		}
-
-		//glm::mat4 PrjSky = glm::perspective(glm::radians(45.0f), Ar, 0.1f, 50.0f); PrjSky[1][1] *= -1;
-		uboSky.mMat = World;
-		uboSky.mvpMat = Prj * glm::transpose(glm::mat4(SkyBoxDir));
+		
+		uboSky.mMat = glm::translate(glm::mat4(1.0), glm::vec3(1.0f, -10.0f, 1.0f)) *
+					  glm::scale(glm::mat4(1.0), glm::vec3(100.0f));
+		uboSky.mvpMat = ViewPrj * uboSky.mMat;
 		uboSky.nMat = glm::inverse(glm::transpose(uboSky.mMat));
 		DSskyBox.map(currentImage, &uboSky, sizeof(uboSky), 0);
-		//SKYBOX END*********************************************************************/
 
 		World = glm::translate(glm::mat4(1.0f), glm::vec3(-1.5f, 2.5f, 0.0f));
 		uboMars.amb = 1.0f; uboMars.gamma = 180.0f; uboMars.sColor = glm::vec3(1.0f);
