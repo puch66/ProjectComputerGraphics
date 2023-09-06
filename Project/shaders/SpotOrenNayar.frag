@@ -52,9 +52,9 @@ vec3 BRDF(vec3 V, vec3 N, vec3 L, vec3 Md, float sigma) {
 }
 
 const float beta = 2.0f;
-const float g = 1.5;
-const float cosout = 0.85;
-const float cosin  = 0.95;
+const float g = 3;
+const float cosout = 0.60;
+const float cosin  = 0.80;
 
 void main() {
 	vec3 Norm = normalize(fragNorm);
