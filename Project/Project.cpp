@@ -60,11 +60,21 @@ class Project : public BaseProject {
 	int curText;
 
 	//number of elements for each object
+	//level one
 	static const int n_ground = 9;
-	static const int n_water = 2;
+	//level two
+	static const int n_wood = 25;
+	static const int n_water = 24;
+	static const int n_small_water = 44;
 	static const int n_log = 7;
 	static const int n_coin = 5;
-	static const int n_tot_assets = n_ground + n_water + n_log + n_coin;
+	static const int n_cloud1 = 5;
+	static const int n_cloud2 = 5;
+	static const int n_cloud3 = 5;
+	static const int n_bridge = 5;
+	static const int n_lily = 1;
+	static const int n_tot_assets = n_ground + n_water + n_small_water + n_log + n_wood +
+									n_coin + n_cloud1 + n_cloud2 + n_cloud3 + n_bridge + n_lily;
 
 	// Current aspect ratio (used by the callback that resized the window
 	float Ar;
@@ -86,10 +96,11 @@ class Project : public BaseProject {
 
 	// Models, textures and Descriptors (values assigned to the uniforms)
 	// Please note that Model objects depends on the corresponding vertex structure
-	Model<VertexMesh> MBody, MMars, MskyBox, MGround, MWater, MLog, MCoin;
+	Model<VertexMesh> MBody, MMars, MskyBox, MGround, MWater, MSmallWater, MLog, MCoin, MCloud1, MCloud2, MCloud3, MBridge, MLily, MWood;
 	Model<VertexOverlay> MGameOver, MSplash, MMenu;
 	DescriptorSet DSGubo, DSBody, DSGameOver, DSSplash, DSMars, DSskyBox, DSMenu;
-	DescriptorSet DSGround[n_ground], DSWater[n_water], DSLog[n_log], DSCoin[n_coin];
+	DescriptorSet DSGround[n_ground], DSWater[n_water], DSSmallWater[n_small_water], DSLog[n_log], DSCoin[n_coin],
+				  DSCloud1[n_cloud1], DSCloud2[n_cloud2], DSCloud3[n_cloud3], DSBridge[n_bridge], DSLily[n_lily], DSWood[n_wood];
 	Texture TAssets, TGameOver, TSplash, TMars, TskyBox, TMenu;
 	
 	// C++ storage for uniform variables
@@ -122,13 +133,22 @@ class Project : public BaseProject {
 	//world matrix for the objects
 	glm::mat4 GroundWM[n_ground];
 	glm::mat4 WaterWM[n_water];
+	glm::mat4 SmallWaterWM[n_small_water];
 	glm::mat4 LogWM[n_log];
 	glm::mat4 CoinWM[n_coin];
+	glm::mat4 Cloud1WM[n_cloud1];
+	glm::mat4 Cloud2WM[n_cloud2];
+	glm::mat4 Cloud3WM[n_cloud3];
+	glm::mat4 BridgeWM[n_bridge];
+	glm::mat4 LilyWM[n_lily];
+	glm::mat4 WoodWM[n_wood];
 
 	//vectors with the distances to check for the collision
 	const glm::vec3 collision_log = glm::vec3(1.0f, 0.3f, 0.5f);
 	const glm::vec3 collision_log_rotated = glm::vec3(0.5f, 0.3f, 1.0f);
 	const glm::vec3 collision_coin = glm::vec3(0.7f, 1.0f, 0.7f);
+	const glm::vec3 collision_water = glm::vec3(4.0f, 4.0f, 4.0f);
+	const glm::vec3 collision_small_water = glm::vec3(2.0f, 2.0f, 2.0f);
 
 	// Here you set the main application parameters
 	void setWindowParameters() {
@@ -249,12 +269,19 @@ class Project : public BaseProject {
 		// The second parameter is the pointer to the vertex definition for this model
 		// The third parameter is the file name
 		// The last is a constant specifying the file type: currently only OBJ or GLTF
-		MBody.init(this,   &VMesh, "Models/cannon.obj", OBJ);
+		MBody.init(this, &VMesh, "Models/slime.obj", OBJ);
 		MskyBox.init(this, &VMesh, "Models/SkyBoxCube.obj", OBJ);
 		MGround.init(this, &VMesh, "Models/ground_grass_8.obj", OBJ);
+		MWood.init(this, &VMesh, "Models/ground_wood_4.obj", OBJ);
 		MWater.init(this, &VMesh, "Models/water_4.obj", OBJ);
+		MSmallWater.init(this, &VMesh, "Models/water_4.obj", OBJ);
 		MLog.init(this, &VMesh, "Models/wall_spiked_logs.obj", OBJ);
 		MCoin.init(this, &VMesh, "Models/coin.obj", OBJ);
+		MCloud1.init(this, &VMesh, "Models/cloud_1.obj", OBJ);
+		MCloud2.init(this, &VMesh, "Models/cloud_2.obj", OBJ);
+		MCloud3.init(this, &VMesh, "Models/cloud_3.obj", OBJ);
+		MBridge.init(this, &VMesh, "Models/bridge_1.obj", OBJ);
+		MLily.init(this, &VMesh, "Models/lilypad.obj", OBJ);
 
 		createSphereMesh(MMars.vertices, MMars.indices);
 		MMars.initMesh(this, &VMesh);
@@ -304,35 +331,16 @@ class Project : public BaseProject {
 		curText = 0;
 		coinsCollected = 0;
 
-		GroundWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, 0));
-		GroundWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, -8));
-		GroundWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-8, 0, -8));
-		GroundWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-8, 0, 0));
-		GroundWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(8, 0, 0));
-		GroundWM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-8, 0, 8));
-		GroundWM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(8, 0, -8));
-		GroundWM[7] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(8, 0, 8));
-		GroundWM[8] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, 8));
-
-		WaterWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.5f, 1.0f, 1.5f)), glm::vec3(0, 0, -60));
-		WaterWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(20, 0, 60));
-
-		LogWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5, 0.2, 0)) *
-			glm::rotate(glm::mat4(1.0), 90.f, glm::vec3(0, 1, 0));
-		LogWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(40, 0.2, -20));
-		LogWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(39, 0.2, -20));
-		LogWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28, 0.2, 8)) *
-			glm::rotate(glm::mat4(1.0), 90.f, glm::vec3(0, 1, 0));
-		LogWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28.8, 0.2, 7.5));
-		LogWM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12, 0.2, -8))
-			* glm::rotate(glm::mat4(1.0), 45.f, glm::vec3(0, 1, 0));
-		LogWM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5, 0.2, 18));
-
-		CoinWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5.7f, 0.7f, 0));
-		CoinWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(39.5, 0.7, -21));
-		CoinWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28.7, 0.7, 8.2));
-		CoinWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12.5, 0.7, -8.6));
-		CoinWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5.15, 0.7, 18.5));
+		place_wood();
+		place_ground();
+		place_water();
+		place_logs();
+		place_coins_first_level();
+		//place_coins_second_level();
+		place_small_water();
+		place_lily();
+		place_bridges();
+		place_clouds();
 	}
 	
 	// Here you create your pipelines and Descriptor Sets!
@@ -389,6 +397,12 @@ class Project : public BaseProject {
 						{1, TEXTURE, 0, &TAssets}
 				});
 		}
+		for (int i = 0; i < n_small_water; i++) {
+			DSSmallWater[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
 		for (int i = 0; i < n_log; i++) {
 			DSLog[i].init(this, &DSLMesh, {
 						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
@@ -397,6 +411,42 @@ class Project : public BaseProject {
 		}
 		for (int i = 0; i < n_coin; i++) {
 			DSCoin[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
+		for (int i = 0; i < n_bridge; i++) {
+			DSBridge[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
+		for (int i = 0; i < n_lily; i++) {
+			DSLily[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
+		for (int i = 0; i < n_cloud1; i++) {
+			DSCloud1[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
+		for (int i = 0; i < n_cloud2; i++) {
+			DSCloud2[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
+		for (int i = 0; i < n_cloud3; i++) {
+			DSCloud3[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
+		for (int i = 0; i < n_wood; i++) {
+			DSWood[i].init(this, &DSLMesh, {
 						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
 						{1, TEXTURE, 0, &TAssets}
 				});
@@ -420,8 +470,15 @@ class Project : public BaseProject {
 		DSMenu.cleanup();
 		for (int i = 0; i < n_ground; i++) DSGround[i].cleanup();
 		for (int i = 0; i < n_water; i++) DSWater[i].cleanup();
+		for (int i = 0; i < n_small_water; i++) DSSmallWater[i].cleanup();
 		for (int i = 0; i < n_log; i++) DSLog[i].cleanup();
 		for (int i = 0; i < n_coin; i++) DSCoin[i].cleanup();
+		for (int i = 0; i < n_cloud1; i++) DSCloud1[i].cleanup();
+		for (int i = 0; i < n_cloud2; i++) DSCloud2[i].cleanup();
+		for (int i = 0; i < n_cloud3; i++) DSCloud3[i].cleanup();
+		for (int i = 0; i < n_bridge; i++) DSBridge[i].cleanup();
+		for (int i = 0; i < n_lily; i++) DSLily[i].cleanup();
+		for (int i = 0; i < n_wood; i++) DSWood[i].cleanup();
 		DSGameOver.cleanup();
 		DSSplash.cleanup();
 		DSGubo.cleanup();
@@ -452,8 +509,15 @@ class Project : public BaseProject {
 		MMenu.cleanup();
 		MGround.cleanup();
 		MWater.cleanup();
+		MSmallWater.cleanup();
 		MLog.cleanup();
 		MCoin.cleanup();
+		MCloud1.cleanup();
+		MCloud2.cleanup();
+		MCloud3.cleanup();
+		MBridge.cleanup();
+		MLily.cleanup();
+		MWood.cleanup();
 		
 		// Cleanup descriptor set layouts
 		DSLMesh.cleanup();
@@ -501,62 +565,136 @@ class Project : public BaseProject {
 		// the second parameter is the number of indexes to be drawn. For a Model object,
 		// this can be retrieved with the .indices.size() method.
 
-		MMars.bind(commandBuffer);
-		DSMars.bind(commandBuffer, PMesh, 1, currentImage);
-		vkCmdDrawIndexed(commandBuffer,
+		switch (currentLevel) {
+		case 1:
+			MMars.bind(commandBuffer);
+			DSMars.bind(commandBuffer, PMesh, 1, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MMars.indices.size()), 1, 0, 0, 0);
 
-		MGround.bind(commandBuffer);
-		for (int i = 0; i < n_ground; i++) {
-			DSGround[i].bind(commandBuffer, PMesh, 1, currentImage); //attenti a metterlo vicino agli altri oggetti che usano la stessa pipeline
+			MGround.bind(commandBuffer);
+			for (int i = 0; i < n_ground; i++) {
+				DSGround[i].bind(commandBuffer, PMesh, 1, currentImage); //attenti a metterlo vicino agli altri oggetti che usano la stessa pipeline
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MGround.indices.size()), 1, 0, 0, 0);
+			}
+			MLog.bind(commandBuffer);
+			for (int i = 0; i < n_log; i++) {
+				DSLog[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MLog.indices.size()), 1, 0, 0, 0);
+			}
+
+			MCoin.bind(commandBuffer);
+			for (int i = 0; i < n_coin; i++) {
+				DSCoin[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MCoin.indices.size()), 1, 0, 0, 0);
+			}
+
+			PskyBox.bind(commandBuffer);
+			MskyBox.bind(commandBuffer);
+			DSskyBox.bind(commandBuffer, PskyBox, 0, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MGround.indices.size()), 1, 0, 0, 0);
-		}
-
-		MWater.bind(commandBuffer);
-		for (int i = 0; i < n_water; i++) {
-			DSWater[i].bind(commandBuffer, PMesh, 1, currentImage); //attenti a metterlo vicino agli altri oggetti che usano la stessa pipeline
+				static_cast<uint32_t>(MskyBox.indices.size()), 1, 0, 0, 0);
+			break;
+		case 2:
+			MMars.bind(commandBuffer);
+			DSMars.bind(commandBuffer, PMesh, 1, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MWater.indices.size()), 1, 0, 0, 0);
-		}
+				static_cast<uint32_t>(MMars.indices.size()), 1, 0, 0, 0);
 
-		MLog.bind(commandBuffer);
-		for (int i = 0; i < n_log; i++) {
-			DSLog[i].bind(commandBuffer, PMesh, 1, currentImage); //attenti a metterlo vicino agli altri oggetti che usano la stessa pipeline
+			MWater.bind(commandBuffer);
+			for (int i = 0; i < n_water; i++) {
+				DSWater[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MWater.indices.size()), 1, 0, 0, 0);
+			}
+
+			MSmallWater.bind(commandBuffer);
+			for (int i = 0; i < n_small_water; i++) {
+				DSSmallWater[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MSmallWater.indices.size()), 1, 0, 0, 0);
+			}
+
+			MCloud1.bind(commandBuffer);
+			for (int i = 0; i < n_cloud1; i++) {
+				DSCloud1[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MCloud1.indices.size()), 1, 0, 0, 0);
+			}
+
+			MBridge.bind(commandBuffer);
+			for (int i = 0; i < n_bridge; i++) {
+				DSBridge[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MBridge.indices.size()), 1, 0, 0, 0);
+			}
+
+			MLily.bind(commandBuffer);
+			for (int i = 0; i < n_lily; i++) {
+				DSLily[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MLily.indices.size()), 1, 0, 0, 0);
+			}
+
+			MCloud2.bind(commandBuffer);
+			for (int i = 0; i < n_cloud2; i++) {
+				DSCloud2[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MCloud2.indices.size()), 1, 0, 0, 0);
+			}
+
+			MCloud3.bind(commandBuffer);
+			for (int i = 0; i < n_cloud3; i++) {
+				DSCloud3[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MCloud3.indices.size()), 1, 0, 0, 0);
+			}
+
+			MWood.bind(commandBuffer);
+			for (int i = 0; i < n_wood; i++) {
+				DSWood[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MWood.indices.size()), 1, 0, 0, 0);
+			}
+
+			MCoin.bind(commandBuffer);
+			for (int i = 0; i < n_coin; i++) {
+				DSCoin[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MCoin.indices.size()), 1, 0, 0, 0);
+			}
+
+			PskyBox.bind(commandBuffer);
+			MskyBox.bind(commandBuffer);
+			DSskyBox.bind(commandBuffer, PskyBox, 0, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MLog.indices.size()), 1, 0, 0, 0);
-		}
-
-		MCoin.bind(commandBuffer);
-		for (int i = 0; i < n_coin; i++) {
-			DSCoin[i].bind(commandBuffer, PMesh, 1, currentImage); //attenti a metterlo vicino agli altri oggetti che usano la stessa pipeline
+				static_cast<uint32_t>(MskyBox.indices.size()), 1, 0, 0, 0);
+			break;
+		case 0: //splash screen
+			POverlay.bind(commandBuffer);
+			MSplash.bind(commandBuffer);
+			DSSplash.bind(commandBuffer, POverlay, 0, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MCoin.indices.size()), 1, 0, 0, 0);
-		}
-
-		//aggiungere qui nuovi oggetti
-
-
-		PskyBox.bind(commandBuffer);
-		MskyBox.bind(commandBuffer);
-		DSskyBox.bind(commandBuffer, PskyBox, 0, currentImage);
-		vkCmdDrawIndexed(commandBuffer,
-			static_cast<uint32_t>(MskyBox.indices.size()), 1, 0, 0, 0);
-				
-		POverlay.bind(commandBuffer);
-		MGameOver.bind(commandBuffer);
-		DSGameOver.bind(commandBuffer, POverlay, 0, currentImage);
-		vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MGameOver.indices.size()), 1, 0, 0, 0);
-
-		MSplash.bind(commandBuffer);
-		DSSplash.bind(commandBuffer, POverlay, 0, currentImage);
-		vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MSplash.indices.size()), 1, 0, 0, 0);
-		MMenu.bind(commandBuffer);
-		DSMenu.bind(commandBuffer, POverlay, 0, currentImage);
-		vkCmdDrawIndexed(commandBuffer,
-			static_cast<uint32_t>(MMenu.indices.size()), 1, 0, 0, 0);
+			break;
+		case 3: //menu
+			POverlay.bind(commandBuffer);
+			MMenu.bind(commandBuffer);
+			DSMenu.bind(commandBuffer, POverlay, 0, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
+				static_cast<uint32_t>(MMenu.indices.size()), 1, 0, 0, 0);
+			break;
+		case 4: //gameover
+			POverlay.bind(commandBuffer);
+			MGameOver.bind(commandBuffer);
+			DSGameOver.bind(commandBuffer, POverlay, 0, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
+				static_cast<uint32_t>(MGameOver.indices.size()), 1, 0, 0, 0);
+			break;
+		}
 
 		txt.populateCommandBuffer(commandBuffer, currentImage, curText);
 
@@ -593,12 +731,39 @@ class Project : public BaseProject {
 		glfwGetCursorPos(window, &xpos, &ypos);
 		glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, GLFW_TRUE);
 
+
+		// Parameters
+		// Camera FOV-y, Near Plane and Far Plane
+		const float FOVy = glm::radians(90.0f);
+		const float nearPlane = 0.1f;
+		const float farPlane = 100.0f;
+		const float rotSpeed = glm::radians(120.0f);
+		const float movSpeed = 4.0f;
+
+		// Camera Pitch limits
+		const float minPitch = glm::radians(-8.75f);
+		const float maxPitch = glm::radians(60.0f);
+		float prev_pitch = CamPitch;
+
+		//Current player angle
+		static float fixedYaw = 0.0f;
+
+		const float camDist = 2.0f;
+
+		//handle collisions
+		glm::vec3 tx = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(1, 0, 0, 1));
+		glm::vec3 ty = glm::vec3(0, 1, 0);
+		glm::vec3 tz = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(0, 0, -1, 1));
+		glm::vec3 bodyCollider = glm::vec3(bodyPos + tx * movSpeed * m.x * deltaT +
+			ty * movSpeed * m.y * deltaT +
+			tz * movSpeed * m.z * deltaT);
+
 		switch(gameState) {		// main state machine implementation
 		  case 0: // initial state - show splash screen
 			m = glm::vec3(0.0f);
 			r = glm::vec3(0.0f);
 			if(handleFire) {
-				gameState = 1;	// jump to the wait key state
+				gameState = 1;
 				currentLevel = 1;
 				curText++;
 				RebuildPipeline();
@@ -614,13 +779,48 @@ class Project : public BaseProject {
 		  case 1: // level one
 			// handle coin rotation
 			coinAngle += coinSpeed * deltaT;
-			if(handleFire) {
-				gameState = 4;	// jump to the moving handle state
+
+			//check collisions
+			for (int i = 0; i < n_log; i++) {
+				if (checkCollision(bodyCollider, bodyPos, glm::vec3(LogWM[i][3].x, LogWM[i][3].y, LogWM[i][3].z), collision_log)
+					&& !MoveCam) {
+					m = glm::vec3(0.0f);
+					r = glm::vec3(0.0f);
+					//std::cout << "COLLISION";
+				}
 			}
 			break;
 		  case 2: // level two
-			if (handleFire) {
-				gameState = 4;	// jump to the moving handle state
+			// handle coin rotation
+			coinAngle += coinSpeed * deltaT;
+
+			//check collisions
+			for (int i = 0; i < n_water; i++) {
+				if (checkCollision(bodyCollider, bodyPos, glm::vec3(WaterWM[i][3].x, WaterWM[i][3].y, WaterWM[i][3].z), collision_water)
+					&& !MoveCam) {
+					m = glm::vec3(0.0f);
+					r = glm::vec3(0.0f);
+					reset_position();
+					coinsCollected = 0;
+					curText = 1;
+					place_coins_second_level();
+					RebuildPipeline();
+					//std::cout << "COLLISION";
+				}
+			}
+
+			for (int i = 0; i < n_small_water; i++) {
+				if (checkCollision(bodyCollider, bodyPos, glm::vec3(SmallWaterWM[i][3].x, SmallWaterWM[i][3].y, SmallWaterWM[i][3].z), collision_small_water)
+					&& !MoveCam) {
+					m = glm::vec3(0.0f);
+					r = glm::vec3(0.0f);
+					reset_position();
+					coinsCollected = 0;
+					curText = 1;
+					place_coins_second_level();
+					RebuildPipeline();
+					//std::cout << "COLLISION";
+				}
 			}
 			break;
 		  case 3: // pause menu
@@ -652,59 +852,45 @@ class Project : public BaseProject {
 				glfwSetCursor(window, cursor);
 			}
 			break;
+		  case 4: //gameOver
+			break;
 		}
-		
-		// Parameters
-		// Camera FOV-y, Near Plane and Far Plane
-		const float FOVy = glm::radians(90.0f);
-		const float nearPlane = 0.1f;
-		const float farPlane = 100.0f;
-		const float rotSpeed = glm::radians(120.0f);
-		const float movSpeed = 4.0f;
-
-		// Camera Pitch limits
-		const float minPitch = glm::radians(-8.75f);
-		const float maxPitch = glm::radians(60.0f);
-		float prev_pitch = CamPitch;
-
-		//Current player angle
-		static float fixedYaw = 0.0f;
-		
-		const float camDist = 2.0f;
-
-		//handle collisions
-		glm::vec3 tx = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(1, 0, 0, 1));
-		glm::vec3 ty = glm::vec3(0, 1, 0);
-		glm::vec3 tz = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(0, 0, -1, 1));
-		glm::vec3 bodyCollider = glm::vec3(bodyPos + tx * movSpeed * m.x * deltaT + 
-										   ty * movSpeed * m.y * deltaT + 
-										   tz* movSpeed * m.z * deltaT);
-		for (int i = 0; i < n_log; i++) {
-			if (checkCollision(bodyCollider, bodyPos, glm::vec3(LogWM[i][3].x, LogWM[i][3].y, LogWM[i][3].z), collision_log)) {
-				m = glm::vec3(0.0f);
-				r = glm::vec3(0.0f);
-				//std::cout << "COLLISION";
-			}
-		}
-		for (int i = 0; i < n_coin; i++) {
-			if (checkCollision(bodyCollider, bodyPos, glm::vec3(CoinWM[i][3].x, CoinWM[i][3].y, CoinWM[i][3].z), collision_coin)) {
-				CoinWM[i] = glm::translate(glm::scale(glm::mat4(0.0f), glm::vec3(1.0f)), glm::vec3(0.0f));
-				coinsCollected++;
-				if (coinsCollected == 5) {
-					coinsCollected = 0;
-					gameState = 2;
-					currentLevel = 2;
-					curText = 0;
-					RebuildPipeline();
+				
+		if (gameState == 1 || gameState == 2) {
+			for (int i = 0; i < n_coin; i++) {
+				if (checkCollision(bodyCollider, bodyPos, glm::vec3(CoinWM[i][3].x, CoinWM[i][3].y, CoinWM[i][3].z), collision_coin) &&
+					!MoveCam) {
+					CoinWM[i] = glm::translate(glm::scale(glm::mat4(1.0f), glm::vec3(1.0f)), glm::vec3(10000.0f));
+					coinsCollected++;
+					if (coinsCollected == 5) {
+						m = glm::vec3(0.0f);
+						r = glm::vec3(0.0f);
+						coinsCollected = 0;
+						if (currentLevel == 1) {
+							reset_position();
+							gameState = 2;
+							currentLevel = 2;
+							curText = 1;
+							place_coins_second_level();
+						}
+						else {
+							reset_position();
+							gameState = 4;
+							currentLevel = 4;
+							curText = 0;
+						}
+						RebuildPipeline();
+					}
+					else {
+						curText = coinsCollected + 1;
+						RebuildPipeline();
+					}
+					//std::cout << "COLLISION";
 				}
-				else {
-					curText = coinsCollected + 1;
-					RebuildPipeline();
-				}
-				//std::cout << "COLLISION";
 			}
 		}
 		
+		//update camera position and rotation
 		CamRadius -= m.x * movSpeed * deltaT;
 		CamPitch -= r.x * rotSpeed * deltaT;
 		if (CamPitch > maxPitch || CamPitch < minPitch) CamPitch = prev_pitch;
@@ -722,8 +908,15 @@ class Project : public BaseProject {
 			if ((curDebounce == GLFW_KEY_ENTER) && debounce) {
 				debounce = false;
 				curDebounce = 0;
-				gameState = (gameState == 0 || gameState == 3) ? 1 : 3;
-				curText = (gameState == 0 || gameState == 3) ? 0 : 1;
+				if (gameState == 0) {
+					gameState = 1;
+					currentLevel = 1;
+					curText++;
+					RebuildPipeline();
+				}
+				else if (gameState == 1 || gameState == 2 || gameState == 4) gameState = 3;
+				else if (gameState == 3) gameState = currentLevel;
+				curText = (gameState == 1 || gameState == 2) ? coinsCollected + 1 : 0;
 				RebuildPipeline();
 			}
 		}
@@ -761,18 +954,16 @@ class Project : public BaseProject {
 		glm::vec3 c(World_y* glm::vec4(0, CamH + camDist * sin(CamPitch), camDist* cos(CamPitch), 1));
 		glm::vec3 a(glm::vec3(World* glm::vec4(0, 0, 0, 1)) + glm::vec3(0, CamH, 0));
 		static glm::vec3 u = glm::vec3(0, 1, 0);
-		//u = movSpeed * m.x * deltaT; //MARIO GALAXY EFFECT!
 		glm::mat4 View = glm::lookAt(c, a, u);
-
 
 		//Projection matrix
 		glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
 		Prj[1][1] *= -1;
 		glm::vec3 camTarget = glm::vec3(0, CamH, 0);
-		glm::vec3 camPos = camTarget +
-			CamRadius * glm::vec3(cos(CamPitch) * sin(yaw),
-				sin(CamPitch),
-				cos(CamPitch) * cos(yaw));
+		glm::vec3 camPos =  camTarget +
+							CamRadius * glm::vec3(cos(CamPitch) * sin(yaw),
+							sin(CamPitch),
+							cos(CamPitch) * cos(yaw));
 
 		gubo.DlightDir = glm::normalize(glm::vec3(1, 2, 3));
 		gubo.DlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -810,37 +1001,84 @@ class Project : public BaseProject {
 		uboMars.nMat = glm::inverse(glm::transpose(World));
 		DSMars.map(currentImage, &uboMars, sizeof(uboMars), 0);
 
-		for (int i = 0; i < n_ground; i++) {
-			uboAssets.mMat = GroundWM[i];
-			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-			DSGround[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		if (gameState == 1) {
+			for (int i = 0; i < n_ground; i++) {
+				uboAssets.mMat = GroundWM[i];
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSGround[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
+			for (int i = 0; i < n_log; i++) {
+				uboAssets.mMat = LogWM[i];
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSLog[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
 		}
+		else if (gameState == 2) {
+			for (int i = 0; i < n_wood; i++) {
+				uboAssets.mMat = WoodWM[i];
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSWood[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
+			for (int i = 0; i < n_water; i++) {
+				uboAssets.mMat = WaterWM[i];
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSWater[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
+			for (int i = 0; i < n_small_water; i++) {
+				uboAssets.mMat = SmallWaterWM[i];
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSSmallWater[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
+			for (int i = 0; i < n_bridge; i++) {
+				uboAssets.mMat = BridgeWM[i];
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSBridge[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
+			for (int i = 0; i < n_lily; i++) {
+				uboAssets.mMat = LilyWM[i];
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSLily[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
 
-		for (int i = 0; i < n_water; i++) {
-			uboAssets.mMat = WaterWM[i];
-			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-			DSWater[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			for (int i = 0; i < n_cloud1; i++) {
+				uboAssets.mMat = Cloud1WM[i];
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSCloud1[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
+
+			for (int i = 0; i < n_cloud2; i++) {
+				uboAssets.mMat = Cloud2WM[i];
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSCloud2[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
+			for (int i = 0; i < n_cloud3; i++) {
+				uboAssets.mMat = Cloud3WM[i];
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSCloud3[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
 		}
-
-		for (int i = 0; i < n_log; i++) {
-			uboAssets.mMat = LogWM[i];
-			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-			DSLog[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		if (gameState == 1 || gameState == 2) {
+			for (int i = 0; i < n_coin; i++) {
+				uboAssets.mMat = CoinWM[i] * glm::rotate(glm::mat4(1.0), coinAngle, glm::vec3(0, 1, 0));
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSCoin[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
 		}
-
-		for (int i = 0; i < n_coin; i++) {
-			uboAssets.mMat = CoinWM[i] * glm::rotate(glm::mat4(1.0), coinAngle, glm::vec3(0, 1, 0));
-			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-			DSCoin[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-		}
-
+		
 		/* map the uniform data block to the GPU */
 
-		uboGameOver.visible = (gameState == 2) ? 1.0f : 0.0f;
+		uboGameOver.visible = (gameState == 4) ? 1.0f : 0.0f;
 		DSGameOver.map(currentImage, &uboGameOver, sizeof(uboGameOver), 0);
 
 		uboSplash.visible = (gameState == 0) ? 1.0f : 0.0f;
@@ -864,27 +1102,24 @@ class Project : public BaseProject {
 				cursor = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
 				glfwSetCursor(window, cursor);
 				gameState = level;
-				if (level == 1 || level == 2) {
-					currentLevel = level;
-					if (!resume) {
-						bodyPos = glm::vec3(0.0f);
-						CamPitch = glm::radians(15.f);
-						CamYaw = glm::radians(0.0f);
-						yaw = 0.0f;
-					}
-				}
-				if (level == 1 && !resume) {
+				currentLevel = level;
+				if (!resume) {
+					reset_position();
 					coinsCollected = 0;
-					CoinWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5.7f, 0.7f, 0));
-					CoinWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(39.5, 0.7, -21));
-					CoinWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28.7, 0.7, 8.2));
-					CoinWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12.5, 0.7, -8.6));
-					CoinWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5.15, 0.7, 18.5));
+					if(level == 1) place_coins_first_level();
+					if (level == 2) place_coins_second_level();
 				}
-				curText = (level != 1) ? 0: coinsCollected + 1;
+				curText = (currentLevel==1 || currentLevel == 2) ? coinsCollected + 1 : 0;
 				RebuildPipeline();
 			}
 		}
+	}
+
+	void reset_position() {
+		bodyPos = glm::vec3(0.0f);
+		CamPitch = glm::radians(15.f);
+		CamYaw = glm::radians(0.0f);
+		yaw = 0.0f;
 	}
 
 	bool isInRectangle(float x_left, float y_up, float x_right, float y_down) {
@@ -927,6 +1162,180 @@ class Project : public BaseProject {
 				sqrt(pow((originalbox - box2).x, 2) + pow((originalbox - box2).y, 2) + pow((originalbox - box2).z, 2));
 	}
 
+	void place_wood() {
+		WoodWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(0, 0, 0));
+		WoodWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 1.0f)), glm::vec3(0, 0, -2));
+		WoodWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-4, 0, -4));
+		WoodWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-4, 0, 0));
+		WoodWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(4, 0, 0));
+		WoodWM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-4, 0, 8));
+		WoodWM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(4, 0, 8));
+		WoodWM[7] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(4, 0, 4));
+		WoodWM[8] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(0, 0, 4));
+		WoodWM[9] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(8, 0, -4));
+		WoodWM[10] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(0, 0, -8));
+		WoodWM[11] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-8, 0, -8));
+		WoodWM[12] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-8, 0, 0));
+		WoodWM[13] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(8, 0, 0));
+		WoodWM[14] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-8, 0, 8));
+		WoodWM[15] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(8, 0, -8));
+		WoodWM[16] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(8, 0, 8));
+		WoodWM[17] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(0, 0, 8));
+		WoodWM[18] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-4, 0, -8));
+		WoodWM[19] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-8, 0, -4));
+		WoodWM[20] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(4, 0, -8));
+		WoodWM[21] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(4, 0, -4));
+		WoodWM[22] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-8, 0, 4));
+		WoodWM[23] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-4, 0, 4));
+		WoodWM[24] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(8, 0, 4));
+	}
+
+	void place_ground() {
+		GroundWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, 0));
+		GroundWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, -8));
+		GroundWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-8, 0, -8));
+		GroundWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-8, 0, 0));
+		GroundWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(8, 0, 0));
+		GroundWM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-8, 0, 8));
+		GroundWM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(8, 0, -8));
+		GroundWM[7] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(8, 0, 8));
+		GroundWM[8] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, 8));
+	}
+
+	void place_water() {
+		WaterWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-12, 0, -12));
+		WaterWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-12, 0, -8));
+		WaterWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-12, 0, -4));
+		WaterWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-12, 0, 0));
+		WaterWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-12, 0, 4));
+		WaterWM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-12, 0, 8));
+		WaterWM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-12, 0, 12));
+		WaterWM[7] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(12, 0, -12));
+		WaterWM[8] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(12, 0, -8));
+		WaterWM[9] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(12, 0, -4));
+		WaterWM[10] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(12, 0, 0));
+		WaterWM[11] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(12, 0, 4));
+		WaterWM[12] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(12, 0, 8));
+		WaterWM[13] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(12, 0, 12));
+		WaterWM[14] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-8, 0, -12));
+		WaterWM[15] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-4, 0, -12));
+		WaterWM[16] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(0, 0, -12));
+		WaterWM[17] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(4, 0, -12));
+		WaterWM[18] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(8, 0, -12));
+		WaterWM[19] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-8, 0, 12));
+		WaterWM[20] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-4, 0, 12));
+		WaterWM[21] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(0, 0, 12));
+		WaterWM[22] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(4, 0, 12));
+		WaterWM[23] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(8, 0, 12));
+	}
+
+	void place_logs() {
+		LogWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5, 0.2, 0)) *
+			glm::rotate(glm::mat4(1.0), 90.f, glm::vec3(0, 1, 0));
+		LogWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(40, 0.2, -20));
+		LogWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(39, 0.2, -20));
+		LogWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28, 0.2, 8)) *
+			glm::rotate(glm::mat4(1.0), 90.f, glm::vec3(0, 1, 0));
+		LogWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28.8, 0.2, 7.5));
+		LogWM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12, 0.2, -8))
+			* glm::rotate(glm::mat4(1.0), 45.f, glm::vec3(0, 1, 0));
+		LogWM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5, 0.2, 18));
+	}
+
+	void place_coins_first_level() {
+		CoinWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5.7f, 0.7f, 0));
+		CoinWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(39.5, 0.7, -21));
+		CoinWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28.7, 0.7, 8.2));
+		CoinWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12.5, 0.7, -8.6));
+		CoinWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5.15, 0.7, 18.5));
+	}
+
+	void place_coins_second_level() {
+		CoinWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0.7f, -14));
+		CoinWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(2, 0.7, -18));
+		CoinWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0.7, 2));
+		CoinWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0.7, 18));
+		CoinWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0.7, 18));
+	}
+
+	void place_small_water() {
+		SmallWaterWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0.1, -6));
+		SmallWaterWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0.1, -2));
+		SmallWaterWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0.1, 2));
+		SmallWaterWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0.1, 6));
+		SmallWaterWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0.1, -6));
+		SmallWaterWM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0.1, -2));
+		SmallWaterWM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0.1, 2));
+		SmallWaterWM[7] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0.1, 6));
+		SmallWaterWM[8] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0.1, -6));
+		SmallWaterWM[9] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(2, 0.1, -6));
+		SmallWaterWM[10] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(2, 0.1, 6));
+		SmallWaterWM[11] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0.1, -18));
+		SmallWaterWM[12] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0.1, -14));
+		SmallWaterWM[13] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(2, 0.1, -14));
+		SmallWaterWM[14] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0.1, -14));
+		SmallWaterWM[15] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(10, 0.1, -14));
+		SmallWaterWM[16] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0.1, -14));
+		SmallWaterWM[17] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0.1, -14));
+		SmallWaterWM[18] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0.1, -10));
+		SmallWaterWM[19] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0.1, -10));
+		SmallWaterWM[20] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0.1, -2));
+		SmallWaterWM[21] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0.1, 2));
+		SmallWaterWM[22] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0.1, 6));
+		SmallWaterWM[23] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0.1, 10));
+		SmallWaterWM[24] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0.1, 14));
+		SmallWaterWM[25] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0.1, 18));
+		SmallWaterWM[26] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0.1, -2));
+		SmallWaterWM[27] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0.1, 6));
+		SmallWaterWM[28] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0.1, 14));
+		SmallWaterWM[29] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0.1, 14));
+		SmallWaterWM[30] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0.1, 14));
+		SmallWaterWM[31] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(2, 0.1, 14));
+		SmallWaterWM[32] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0.1, 14));
+		SmallWaterWM[33] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(10, 0.1, 14));
+		SmallWaterWM[34] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(10, 0.1, 18));
+		SmallWaterWM[35] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0.1, -6));
+		SmallWaterWM[36] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0.1, -2));
+		SmallWaterWM[37] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0.1, 2));
+		SmallWaterWM[38] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0.1, 6));
+		SmallWaterWM[39] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(10, 0.1, 6));
+		SmallWaterWM[40] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0.1, 6));
+		SmallWaterWM[41] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0.1, 10));
+		SmallWaterWM[42] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0.1, 14));
+		SmallWaterWM[43] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0.1, 18));
+	}
+
+	void place_lily() {
+		LilyWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-8, 0.2, -8));
+	}
+
+	void place_bridges() {
+		BridgeWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0, 6));
+		BridgeWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, -10));
+		BridgeWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(0, 0, -5));
+		BridgeWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0, 14));
+		BridgeWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, 14));
+	}
+
+	void place_clouds() {
+		Cloud1WM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(9.7f, 8.7f, 3));
+		Cloud1WM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(30.5, 8.7, -11));
+		Cloud1WM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-21.7, 8.7, 4.2));
+		Cloud1WM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-7.5, 8.7, -0.6));
+		Cloud1WM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5.15, 8.7, 18.5));
+
+		Cloud2WM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18.7f, 8.7f, 0));
+		Cloud2WM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(24.5, 8.7, -21));
+		Cloud2WM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18.7, 8.7, -14.2));
+		Cloud2WM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2.5, 8.7, 15.6));
+		Cloud2WM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(21.15, 8.7, 28.5));
+
+		Cloud3WM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(12.7f, 8.7f, 10));
+		Cloud3WM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(39.5, 8.7, -1));
+		Cloud3WM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28.7, 8.7, 0.2));
+		Cloud3WM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12.5, 8.7, 8.6));
+		Cloud3WM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18.15, 8.7, 20.5));
+	}
 };
 
 
