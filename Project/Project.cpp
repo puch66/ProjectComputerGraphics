@@ -72,8 +72,12 @@ class Project : public BaseProject {
 	static const int n_cloud3 = 5;
 	static const int n_bridge = 5;
 	static const int n_lily = 1;
+	static const int n_dirt = 25;
+	static const int n_tree2 = 180;
+	static const int n_spike = 35;
 	static const int n_tot_assets = n_ground + n_water + n_small_water + n_log + n_wood +
-									n_coin + n_cloud1 + n_cloud2 + n_cloud3 + n_bridge + n_lily;
+									n_coin + n_cloud1 + n_cloud2 + n_cloud3 + n_bridge + n_lily +
+									n_dirt + n_tree2 + n_spike;
 
 	// Current aspect ratio (used by the callback that resized the window
 	float Ar;
@@ -91,15 +95,17 @@ class Project : public BaseProject {
 	TextMaker txt;
 
 	// Pipelines [Shader couples]
-	Pipeline PMesh, POverlay, PskyBox;
+	Pipeline PMesh, POverlay, PskyBox, PLevel3;
 
 	// Models, textures and Descriptors (values assigned to the uniforms)
 	// Please note that Model objects depends on the corresponding vertex structure
-	Model<VertexMesh> MBody, MMars, MskyBox, MGround, MWater, MSmallWater, MLog, MCoin, MCloud1, MCloud2, MCloud3, MBridge, MLily, MWood;
+	Model<VertexMesh> MBody, MMars, MskyBox, MGround, MWater, MSmallWater, MLog, MCoin,
+					  MCloud1, MCloud2, MCloud3, MBridge, MLily, MWood, MDirt, MTree2, MSpike;
 	Model<VertexOverlay> MGameOver, MSplash, MMenu;
 	DescriptorSet DSGubo, DSBody, DSGameOver, DSSplash, DSMars, DSskyBox, DSMenu;
 	DescriptorSet DSGround[n_ground], DSWater[n_water], DSSmallWater[n_small_water], DSLog[n_log], DSCoin[n_coin],
-				  DSCloud1[n_cloud1], DSCloud2[n_cloud2], DSCloud3[n_cloud3], DSBridge[n_bridge], DSLily[n_lily], DSWood[n_wood];
+				  DSCloud1[n_cloud1], DSCloud2[n_cloud2], DSCloud3[n_cloud3], DSBridge[n_bridge], DSLily[n_lily], DSWood[n_wood],
+				  DSDirt[n_dirt], DSTree2[n_tree2], DSSpike[n_spike];
 	Texture TAssets, TGameOver, TSplash, TMars, TskyBox, TMenu;
 	
 	// C++ storage for uniform variables
@@ -141,6 +147,9 @@ class Project : public BaseProject {
 	glm::mat4 BridgeWM[n_bridge];
 	glm::mat4 LilyWM[n_lily];
 	glm::mat4 WoodWM[n_wood];
+	glm::mat4 DirtWM[n_dirt];
+	glm::mat4 Tree2WM[n_tree2];
+	glm::mat4 SpikeWM[n_spike];
 
 	//vectors with the distances to check for the collision
 	const glm::vec3 collision_log = glm::vec3(1.0f, 0.3f, 0.5f);
@@ -149,6 +158,8 @@ class Project : public BaseProject {
 	const glm::vec3 collision_coin = glm::vec3(0.7f, 1.0f, 0.7f);
 	const glm::vec3 collision_water = glm::vec3(4.0f, 4.0f, 4.0f);
 	const glm::vec3 collision_small_water = glm::vec3(2.0f, 2.0f, 2.0f);
+	const glm::vec3 collision_tree2 = glm::vec3(1.5f, 5.0f, 1.5f);
+	const glm::vec3 collision_spike = glm::vec3(1.0f, 5.0f, 1.0f);
 
 	// Here you set the main application parameters
 	void setWindowParameters() {
@@ -262,6 +273,7 @@ class Project : public BaseProject {
 		PskyBox.init(this, &VMesh, "shaders/SkyBoxVert.spv", "shaders/SkyBoxFrag.spv", { &DSLskyBox });
 		PskyBox.setAdvancedFeatures(VK_COMPARE_OP_LESS_OR_EQUAL, VK_POLYGON_MODE_FILL,
 			VK_CULL_MODE_BACK_BIT, false);
+		PLevel3.init(this, &VMesh, "shaders/MeshVert.spv", "shaders/SpotOrenNayarFrag.spv", { &DSLGubo, &DSLMesh });
 
 		// Models, textures and Descriptors (values assigned to the uniforms)
 
@@ -282,11 +294,14 @@ class Project : public BaseProject {
 		MCloud3.init(this, &VMesh, "Models/cloud_3.obj", OBJ);
 		MBridge.init(this, &VMesh, "Models/bridge_1.obj", OBJ);
 		MLily.init(this, &VMesh, "Models/lilypad.obj", OBJ);
+		MDirt.init(this, &VMesh, "Models/ground_dirt_2.obj", OBJ);
+		MTree2.init(this, &VMesh, "Models/tree_2.obj", OBJ);
+		MSpike.init(this, &VMesh, "Models/wood_spikes.obj", OBJ);
 
 		createSphereMesh(MMars.vertices, MMars.indices);
 		MMars.initMesh(this, &VMesh);
 
-		
+
 		// Creates a mesh with direct enumeration of vertices and indices
 		MGameOver.vertices = { {{-1.0f, -1.0f}, {0.0f, 0.0f}}, {{-1.0f, 1.0f}, {0.0f,1.0f}},
 						 {{ 1.0f, -1.0f}, {1.0f,0.0f}}, {{ 1.0f, 1.0f}, {1.0f,1.0f}} };
@@ -337,10 +352,14 @@ class Project : public BaseProject {
 		place_logs();
 		place_coins_first_level();
 		//place_coins_second_level();
+		//place_level_third_level();
 		place_small_water();
 		place_lily();
 		place_bridges();
 		place_clouds();
+		place_dirt();
+		place_tree2();
+		place_spikes();
 	}
 	
 	// Here you create your pipelines and Descriptor Sets!
@@ -349,6 +368,7 @@ class Project : public BaseProject {
 		PMesh.create();
 		POverlay.create();
 		PskyBox.create();
+		PLevel3.create();
 		
 		// Here you define the data set
 		DSBody.init(this, &DSLMesh, {
@@ -451,6 +471,24 @@ class Project : public BaseProject {
 						{1, TEXTURE, 0, &TAssets}
 				});
 		}
+		for (int i = 0; i < n_dirt; i++) {
+			DSDirt[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
+		for (int i = 0; i < n_tree2; i++) {
+			DSTree2[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
+		for (int i = 0; i < n_spike; i++) {
+			DSSpike[i].init(this, &DSLMesh, {
+						{0, UNIFORM, sizeof(MeshUniformBlock), nullptr},
+						{1, TEXTURE, 0, &TAssets}
+				});
+		}
 
 		txt.pipelinesAndDescriptorSetsInit();
 		
@@ -463,6 +501,7 @@ class Project : public BaseProject {
 		PMesh.cleanup();
 		POverlay.cleanup();
 		PskyBox.cleanup();
+		PLevel3.cleanup();
 
 		// Cleanup datasets
 		DSBody.cleanup();
@@ -479,6 +518,9 @@ class Project : public BaseProject {
 		for (int i = 0; i < n_bridge; i++) DSBridge[i].cleanup();
 		for (int i = 0; i < n_lily; i++) DSLily[i].cleanup();
 		for (int i = 0; i < n_wood; i++) DSWood[i].cleanup();
+		for (int i = 0; i < n_dirt; i++) DSDirt[i].cleanup();
+		for (int i = 0; i < n_tree2; i++) DSTree2[i].cleanup();
+		for (int i = 0; i < n_spike; i++) DSSpike[i].cleanup();
 		DSGameOver.cleanup();
 		DSSplash.cleanup();
 		DSGubo.cleanup();
@@ -518,7 +560,9 @@ class Project : public BaseProject {
 		MBridge.cleanup();
 		MLily.cleanup();
 		MWood.cleanup();
-		
+		MDirt.cleanup();
+		MTree2.cleanup();
+		MSpike.cleanup();
 		// Cleanup descriptor set layouts
 		DSLMesh.cleanup();
 		DSLOverlay.cleanup();
@@ -531,6 +575,7 @@ class Project : public BaseProject {
 		PMesh.destroy();		
 		POverlay.destroy();
 		PskyBox.destroy();
+		PLevel3.destroy();
 	}
 	
 	// Here it is the creation of the command buffer:
@@ -538,35 +583,27 @@ class Project : public BaseProject {
 	// with their buffers and textures
 	
 	void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
-		// sets global uniforms (see below fro parameters explanation)
-		DSGubo.bind(commandBuffer, PMesh, 0, currentImage);
-
-		// binds the pipeline
-		PMesh.bind(commandBuffer);
-		// For a pipeline object, this command binds the corresponing pipeline to the command buffer passed in its parameter
-
-		// binds the model
-		MBody.bind(commandBuffer);
-		// For a Model object, this command binds the corresponing index and vertex buffer
-		// to the command buffer passed in its parameter
-		
-		// binds the data set
-		DSBody.bind(commandBuffer, PMesh, 1, currentImage);
-		// For a Dataset object, this command binds the corresponing dataset
-		// to the command buffer and pipeline passed in its first and second parameters.
-		// The third parameter is the number of the set being bound
-		// As described in the Vulkan tutorial, a different dataset is required for each image in the swap chain.
-		// This is done automatically in file Starter.hpp, however the command here needs also the index
-		// of the current image in the swap chain, passed in its last parameter
-					
-		// record the drawing command in the command buffer
-		vkCmdDrawIndexed(commandBuffer,
+		if (gameState != 3) {
+			DSGubo.bind(commandBuffer, PMesh, 0, currentImage);
+			PMesh.bind(commandBuffer);
+			MBody.bind(commandBuffer);
+			DSBody.bind(commandBuffer, PMesh, 1, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MBody.indices.size()), 1, 0, 0, 0);
-		// the second parameter is the number of indexes to be drawn. For a Model object,
-		// this can be retrieved with the .indices.size() method.
+		}
+		else
+		{
+			DSGubo.bind(commandBuffer, PLevel3, 0, currentImage);
+			PLevel3.bind(commandBuffer);
+			MBody.bind(commandBuffer);
+			DSBody.bind(commandBuffer, PLevel3, 1, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
+				static_cast<uint32_t>(MBody.indices.size()), 1, 0, 0, 0);
+		}
+		
 
 		switch (gameState) {
-		case 1:
+		case 1: //level1
 			MMars.bind(commandBuffer);
 			DSMars.bind(commandBuffer, PMesh, 1, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
@@ -598,7 +635,7 @@ class Project : public BaseProject {
 			vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MskyBox.indices.size()), 1, 0, 0, 0);
 			break;
-		case 2:
+		case 2: //level2
 			MMars.bind(commandBuffer);
 			DSMars.bind(commandBuffer, PMesh, 1, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
@@ -673,6 +710,61 @@ class Project : public BaseProject {
 			vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MskyBox.indices.size()), 1, 0, 0, 0);
 			break;
+		case 3: //level3 
+			//PLevel3.bind(commandBuffer);
+			MMars.bind(commandBuffer);
+			DSMars.bind(commandBuffer, PLevel3, 1, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
+				static_cast<uint32_t>(MMars.indices.size()), 1, 0, 0, 0);
+			MDirt.bind(commandBuffer);
+			for (int i = 0; i < n_dirt; i++) {
+				DSDirt[i].bind(commandBuffer, PLevel3, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MDirt.indices.size()), 1, 0, 0, 0);
+			}
+			MTree2.bind(commandBuffer);
+			for (int i = 0; i < n_tree2; i++) {
+				DSTree2[i].bind(commandBuffer, PLevel3, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MTree2.indices.size()), 1, 0, 0, 0);
+			}
+			MSpike.bind(commandBuffer);
+			for (int i = 0; i < n_spike; i++) {
+				DSSpike[i].bind(commandBuffer, PLevel3, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MSpike.indices.size()), 1, 0, 0, 0);
+			}
+			MCoin.bind(commandBuffer);
+			for (int i = 0; i < n_coin; i++) {
+				DSCoin[i].bind(commandBuffer, PLevel3, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MCoin.indices.size()), 1, 0, 0, 0);
+			}
+			MCloud1.bind(commandBuffer);
+			for (int i = 0; i < n_cloud1; i++) {
+				DSCloud1[i].bind(commandBuffer, PLevel3, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MCloud1.indices.size()), 1, 0, 0, 0);
+			}
+			MCloud2.bind(commandBuffer);
+			for (int i = 0; i < n_cloud2; i++) {
+				DSCloud2[i].bind(commandBuffer, PLevel3, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MCloud2.indices.size()), 1, 0, 0, 0);
+			}
+
+			MCloud3.bind(commandBuffer);
+			for (int i = 0; i < n_cloud3; i++) {
+				DSCloud3[i].bind(commandBuffer, PLevel3, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MCloud3.indices.size()), 1, 0, 0, 0);
+			}
+			PskyBox.bind(commandBuffer);
+			MskyBox.bind(commandBuffer);
+			DSskyBox.bind(commandBuffer, PskyBox, 0, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
+				static_cast<uint32_t>(MskyBox.indices.size()), 1, 0, 0, 0);
+			break;
 		case 0: //splash screen
 			POverlay.bind(commandBuffer);
 			MSplash.bind(commandBuffer);
@@ -680,7 +772,7 @@ class Project : public BaseProject {
 			vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MSplash.indices.size()), 1, 0, 0, 0);
 			break;
-		case 3: //menu
+		case 5: //menu
 			POverlay.bind(commandBuffer);
 			MMenu.bind(commandBuffer);
 			DSMenu.bind(commandBuffer, POverlay, 0, currentImage);
@@ -827,24 +919,56 @@ class Project : public BaseProject {
 				}
 			}
 			break;
-		  case 3: // pause menu
+		  case 3:
+			// handle coin rotation
+			coinAngle += coinSpeed * deltaT;
+
+			//check collisions
+			for (int i = 0; i < n_tree2; i++) {
+				if (checkCollision(bodyCollider, bodyPos, glm::vec3(Tree2WM[i][3].x, Tree2WM[i][3].y, Tree2WM[i][3].z), collision_tree2)
+					&& !MoveCam) {
+					m = glm::vec3(0.0f);
+					r = glm::vec3(0.0f);
+					std::cout << "COLLISION" << i;
+				}
+			}
+
+			for (int i = 0; i < n_spike; i++) {
+				if (checkCollision(bodyCollider, bodyPos, glm::vec3(SpikeWM[i][3].x, SpikeWM[i][3].y, SpikeWM[i][3].z), collision_spike)
+					&& !MoveCam) {
+					m = glm::vec3(0.0f);
+					r = glm::vec3(0.0f);
+					reset_position();
+					coinsCollected = 0;
+					curText = 1;
+					place_coins_third_level();
+					RebuildPipeline();
+					//std::cout << "COLLISION";
+				}
+			}
+			break;
+		  case 5: // pause menu
 			m = glm::vec3(0.0f);
 			r = glm::vec3(0.0f);
 
 			//resume button
-			if (isInRectangle( 0.341, 0.374, 0.657, 0.438)) {
+			if (isInRectangle(0.341, 0.355, 0.657, 0.423)) {
 				buttonPlayLevel(currentLevel, &debounce, &curDebounce, true);
 			}
 			//level one button
-			else if (isInRectangle(0.341, 0.5194, 0.657, 0.5806)) {
+			else if (isInRectangle(0.341, 0.463, 0.657, 0.532)) {
 				buttonPlayLevel(1, &debounce, &curDebounce, false);
 			}
 			//level two button
-			else if (isInRectangle(0.341, 0.664, 0.657, 0.725)) {
+			else if (isInRectangle(0.341, 0.580, 0.657, 0.65)) {
 				buttonPlayLevel(2, &debounce, &curDebounce, false);
 			}
+			//level three button
+			else if (isInRectangle(0.341, 0.692, 0.657, 0.761)) {
+				buttonPlayLevel(3, &debounce, &curDebounce, false);
+			}
 			//exit button
-			else if (isInRectangle(0.341, 0.81, 0.657, 0.871)) {
+			else if (isInRectangle(0.341, 0.805, 0.657, 0.874)) {
 				cursor = glfwCreateStandardCursor(GLFW_HAND_CURSOR); // GLFW_CROSSHAIR_CURSOR
 				glfwSetCursor(window, cursor);
 				if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
@@ -860,7 +984,7 @@ class Project : public BaseProject {
 			break;
 		}
 				
-		if (gameState == 1 || gameState == 2) {
+		if (gameState == 1 || gameState == 2 || gameState == 3) {
 			for (int i = 0; i < n_coin; i++) {
 				if (checkCollision(bodyCollider, bodyPos, glm::vec3(CoinWM[i][3].x, CoinWM[i][3].y, CoinWM[i][3].z), collision_coin) &&
 					!MoveCam) {
@@ -870,12 +994,19 @@ class Project : public BaseProject {
 						m = glm::vec3(0.0f);
 						r = glm::vec3(0.0f);
 						coinsCollected = 0;
+						reset_position();
 						if (currentLevel == 1) {
-							reset_position();
 							gameState = 2;
 							currentLevel = 2;
 							curText = 1;
 							place_coins_second_level();
+						}
+						else if (currentLevel == 2) {
+							reset_position();
+							gameState = 3;
+							currentLevel = 3;
+							curText = 1;
+							place_coins_third_level();
 						}
 						else {
 							reset_position();
@@ -918,9 +1049,9 @@ class Project : public BaseProject {
 					curText++;
 					RebuildPipeline();
 				}
-				else if (gameState == 1 || gameState == 2 || gameState == 4) gameState = 3;
-				else if (gameState == 3) gameState = currentLevel;
-				curText = (gameState == 1 || gameState == 2) ? coinsCollected + 1 : 0;
+				else if (gameState == 5) gameState = currentLevel;
+				else gameState = 5;
+				curText = (gameState == 1 || gameState == 2 || gameState == 3) ? coinsCollected + 1 : 0;
 				RebuildPipeline();
 			}
 		}
@@ -969,12 +1100,22 @@ class Project : public BaseProject {
 							sin(CamPitch),
 							cos(CamPitch) * cos(yaw));
 
-		float dang = CamPitch + glm::radians(15.0f);
-		gubo.DlightDir = glm::vec3(cos(dang) * sin(yaw), sin(dang), cos(dang) * cos(yaw));
-		gubo.DlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-		gubo.AmbLightColor = glm::vec3(0.1f);
-		gubo.eyePos = camPos;
-		gubo.lightPos = bodyPos + glm::vec3(0, 1, 0);
+		
+
+		if (gameState != 3) {
+			gubo.DlightDir = glm::normalize(glm::vec3(1, 2, 3));
+			gubo.DlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+			gubo.AmbLightColor = glm::vec3(0.1f);
+			gubo.eyePos = camPos;
+		}
+		else {
+			float dang = CamPitch + glm::radians(15.0f);
+			gubo.DlightDir = glm::vec3(cos(dang) * sin(yaw), sin(dang), cos(dang) * cos(yaw));
+			gubo.DlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+			gubo.AmbLightColor = glm::vec3(0.1f);
+			gubo.eyePos = camPos;
+			gubo.lightPos = bodyPos + glm::vec3(0, 1, 0);
+		}
 
 		//View-projection matrix
 		glm::mat4 ViewPrj = Prj * View;
@@ -1052,7 +1193,28 @@ class Project : public BaseProject {
 				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
 				DSLily[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
 			}
-
+		}
+		else if (gameState == 3) {
+			for (int i = 0; i < n_tree2; i++) {
+				uboAssets.mMat = Tree2WM[i];
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSTree2[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
+			for (int i = 0; i < n_spike; i++) {
+				uboAssets.mMat = SpikeWM[i];
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSSpike[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
+			for (int i = 0; i < n_dirt; i++) {
+				uboAssets.mMat = DirtWM[i];
+				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+				DSDirt[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+			}
+		}
+		if (gameState == 1 || gameState == 2 || gameState == 3) {
 			for (int i = 0; i < n_cloud1; i++) {
 				uboAssets.mMat = Cloud1WM[i];
 				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
@@ -1072,8 +1234,6 @@ class Project : public BaseProject {
 				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
 				DSCloud3[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
 			}
-		}
-		if (gameState == 1 || gameState == 2) {
 			for (int i = 0; i < n_coin; i++) {
 				uboAssets.mMat = CoinWM[i] * glm::rotate(glm::mat4(1.0), coinAngle, glm::vec3(0, 1, 0));
 				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
@@ -1090,7 +1250,7 @@ class Project : public BaseProject {
 		uboSplash.visible = (gameState == 0) ? 1.0f : 0.0f;
 		DSSplash.map(currentImage, &uboSplash, sizeof(uboSplash), 0);
 
-		uboMenu.visible = (gameState == 3) ? 1.0f : 0.0f;
+		uboMenu.visible = (gameState == 5) ? 1.0f : 0.0f;
 		DSMenu.map(currentImage, &uboMenu, sizeof(uboMenu), 0);
 	}
 
@@ -1114,8 +1274,9 @@ class Project : public BaseProject {
 					coinsCollected = 0;
 					if(level == 1) place_coins_first_level();
 					if (level == 2) place_coins_second_level();
+					if (level == 3) place_coins_third_level();
 				}
-				curText = (currentLevel==1 || currentLevel == 2) ? coinsCollected + 1 : 0;
+				curText = (currentLevel==1 || currentLevel == 2 || currentLevel == 3) ? coinsCollected + 1 : 0;
 				RebuildPipeline();
 			}
 		}
@@ -1135,7 +1296,7 @@ class Project : public BaseProject {
 	}
 
 	void handleCameraSwitch(float *debounce, int *curDebounce, float *yaw, float *fixedYaw) {
-		if (glfwGetKey(window, GLFW_KEY_P) && !(gameState == 0 || gameState == 3)) {
+		if (glfwGetKey(window, GLFW_KEY_P) && !(gameState == 0 || gameState == 5 || gameState == 4)) {
 			if (!*debounce) {
 				*debounce = true;
 				*curDebounce = GLFW_KEY_P;
@@ -1350,6 +1511,14 @@ class Project : public BaseProject {
 		CoinWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0.7, 18));
 	}
 
+	void place_coins_third_level() {
+		CoinWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-16, 0.7f, -16));
+		CoinWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(12, 0.7, -8));
+		CoinWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(0, 0.7, 0));
+		CoinWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(0, 0.7, 12));
+		CoinWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(16, 0.7, 14));
+	}
+
 	void place_small_water() {
 		SmallWaterWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0.1, -6));
 		SmallWaterWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0.1, -2));
@@ -1431,6 +1600,258 @@ class Project : public BaseProject {
 		Cloud3WM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28.7, 8.7, 0.2));
 		Cloud3WM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12.5, 8.7, 8.6));
 		Cloud3WM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18.15, 8.7, 20.5));
+	}
+
+	void place_dirt() {
+		DirtWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, 0));
+		DirtWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-2, 0, -2));
+		DirtWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, -2));
+		DirtWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-2, 0, 0));
+		DirtWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(2, 0, 0));
+		DirtWM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-2, 0, 4));
+		DirtWM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(2, 0, 4));
+		DirtWM[7] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(2, 0, 2));
+		DirtWM[8] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, 2));
+		DirtWM[9] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(4, 0, -2));
+		DirtWM[10] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, -4));
+		DirtWM[11] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-4, 0, -4));
+		DirtWM[12] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-4, 0, 0));
+		DirtWM[13] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(4, 0, 0));
+		DirtWM[14] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-4, 0, 4));
+		DirtWM[15] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(4, 0, -4));
+		DirtWM[16] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(4, 0, 4));
+		DirtWM[17] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(0, 0, 4));
+		DirtWM[18] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-2, 0, -4));
+		DirtWM[19] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-4, 0, -2));
+		DirtWM[20] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(2, 0, -4));
+		DirtWM[21] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(2, 0, -2));
+		DirtWM[22] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-4, 0, 2));
+		DirtWM[23] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(-2, 0, 2));
+		DirtWM[24] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(4.0f, 1.0f, 4.0f)), glm::vec3(4, 0, 2));
+	}
+
+	void place_tree2() {
+		//BORDER TREES
+		Tree2WM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, -18));
+		Tree2WM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-16, 0, -18));
+		Tree2WM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0, -18));
+		Tree2WM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12, 0, -18));
+		Tree2WM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0, -18));
+		Tree2WM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-8, 0, -18));
+		Tree2WM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0, -18));
+		Tree2WM[7] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-4, 0, -18));
+		Tree2WM[8] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0, -18));
+		Tree2WM[9] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(0, 0, -18));
+		Tree2WM[10] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(2, 0, -18));
+		Tree2WM[11] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(4, 0, -18));
+		Tree2WM[12] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0, -18));
+		Tree2WM[13] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(8, 0, -18));
+		Tree2WM[14] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(10, 0, -18));
+		Tree2WM[15] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(12, 0, -18));
+		Tree2WM[16] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, -18));
+		Tree2WM[17] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(16, 0, -18));
+		Tree2WM[18] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, -18));
+		Tree2WM[19] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, 18));
+		Tree2WM[20] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-16, 0, 18));
+		Tree2WM[21] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0, 18));
+		Tree2WM[22] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12, 0, 18));
+		Tree2WM[23] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0, 18));
+		Tree2WM[24] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-8, 0, 18));
+		Tree2WM[25] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0, 18));
+		Tree2WM[26] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-4, 0, 18));
+		Tree2WM[27] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0, 18));
+		Tree2WM[28] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(0, 0, 18));
+		Tree2WM[29] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(2, 0, 18));
+		Tree2WM[30] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(4, 0, 18));
+		Tree2WM[31] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0, 18));
+		Tree2WM[32] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(8, 0, 18));
+		Tree2WM[33] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(10, 0, 18));
+		Tree2WM[34] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(12, 0, 18));
+		Tree2WM[35] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, 18));
+		Tree2WM[36] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(16, 0, 18));
+		Tree2WM[37] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, 18));
+		Tree2WM[38] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, 16));
+		Tree2WM[39] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, 14));
+		Tree2WM[40] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, 12));
+		Tree2WM[41] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, 10));
+		Tree2WM[42] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, 8));
+		Tree2WM[43] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, 6));
+		Tree2WM[44] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, 4));
+		Tree2WM[45] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, 2));
+		Tree2WM[46] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, 0));
+		Tree2WM[47] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, -2));
+		Tree2WM[48] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, -4));
+		Tree2WM[49] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, -6));
+		Tree2WM[50] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, -8));
+		Tree2WM[51] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, -10));
+		Tree2WM[52] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, -12));
+		Tree2WM[53] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, -14));
+		Tree2WM[54] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, -16));
+		Tree2WM[55] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, 16));
+		Tree2WM[56] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, 14));
+		Tree2WM[57] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, 12));
+		Tree2WM[58] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, 10));
+		Tree2WM[59] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, 8));
+		Tree2WM[60] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, 6));
+		Tree2WM[61] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, 4));
+		Tree2WM[62] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, 2));
+		Tree2WM[63] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, 0));
+		Tree2WM[64] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, -2));
+		Tree2WM[65] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, -4));
+		Tree2WM[66] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, -6));
+		Tree2WM[67] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, -8));
+		Tree2WM[68] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, -10));
+		Tree2WM[69] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, -12));
+		Tree2WM[70] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, -14));
+		Tree2WM[71] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18, 0, -16));
+
+		//INSIDE TREES
+		Tree2WM[72] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-16, 0, 10));
+		Tree2WM[73] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0, 10));
+		Tree2WM[74] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12, 0, 10));
+		Tree2WM[75] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-16, 0, 12));
+		Tree2WM[76] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0, 12));
+		Tree2WM[77] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12, 0, 12));
+		Tree2WM[78] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0, 10));
+		Tree2WM[79] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0, 12));
+		Tree2WM[80] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0, 14));
+		Tree2WM[81] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0, 16));
+		Tree2WM[82] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0, 14));
+		Tree2WM[83] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(0, 0, 14));
+		Tree2WM[84] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(2, 0, 14));
+		Tree2WM[85] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(4, 0, 14));
+		Tree2WM[86] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0, 14));
+		Tree2WM[87] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(8, 0, 14));
+		Tree2WM[88] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0, 12));
+		Tree2WM[89] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0, 10));
+		Tree2WM[90] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0, 8));
+		Tree2WM[91] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0, 6));
+		Tree2WM[92] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12, 0, 6));
+		Tree2WM[93] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0, 6));
+		Tree2WM[94] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-8, 0, 6));
+		Tree2WM[95] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0, 6));
+		Tree2WM[96] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-4, 0, 6));
+		Tree2WM[97] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0, 6));
+		Tree2WM[98] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(0, 0, 6));
+		Tree2WM[99] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(2, 0, 6));
+		Tree2WM[100] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(2000, -1000, 2000));
+		Tree2WM[101] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(4, 0, 6));
+		Tree2WM[102] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0, 6));
+		Tree2WM[103] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(8, 0, 6));
+		Tree2WM[104] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(0, 0, 8));
+		Tree2WM[105] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(2, 0, 8));
+		Tree2WM[106] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(4, 0, 8));
+		Tree2WM[107] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0, 8));
+		Tree2WM[108] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(8, 0, 8));
+		Tree2WM[109] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(8, 0, 10));
+		Tree2WM[110] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(10, 0, 10));
+		Tree2WM[111] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(12, 0, 10));
+		Tree2WM[112] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(12, 0, 12));
+		Tree2WM[113] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(12, 0, 14));
+		Tree2WM[114] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(12, 0, 16));
+		Tree2WM[115] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(16, 0, 8));
+		Tree2WM[116] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(16, 0, 10));
+		Tree2WM[117] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, 4));
+		Tree2WM[118] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, 6));
+		Tree2WM[119] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, 0));
+		Tree2WM[120] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, -2));
+		Tree2WM[121] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, -4));
+		Tree2WM[122] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, -6));
+		Tree2WM[123] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, -8));
+		Tree2WM[124] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, -10));
+		Tree2WM[125] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, -12));
+		Tree2WM[126] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, -14));
+		Tree2WM[127] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(8, 0, -14));
+		Tree2WM[128] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(10, 0, -14));
+		Tree2WM[129] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(12, 0, -14));
+		Tree2WM[130] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(4, 0, -10));
+		Tree2WM[131] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0, -10));
+		Tree2WM[132] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(8, 0, -10));
+		Tree2WM[133] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(10, 0, -10));
+		Tree2WM[134] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(4, 0, -12));
+		Tree2WM[135] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(4, 0, -14));
+		Tree2WM[136] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(4, 0, -16));
+		Tree2WM[137] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-4, 0, -16));
+		Tree2WM[138] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-4, 0, -14));
+		Tree2WM[139] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-4, 0, -12));
+		Tree2WM[140] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0, -16));
+		Tree2WM[141] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0, -14));
+		Tree2WM[142] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0, -12));
+		Tree2WM[143] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0, -6));
+		Tree2WM[144] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-4, 0, -6));
+		Tree2WM[145] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0, -6));
+		Tree2WM[146] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(0, 0, -6));
+		Tree2WM[147] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(2, 0, -6));
+		Tree2WM[148] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(4, 0, -6));
+		Tree2WM[149] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0, -6));
+		Tree2WM[150] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0, -4));
+		Tree2WM[151] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0, -2));
+		Tree2WM[152] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0, 0));
+		Tree2WM[153] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0, 2));
+		Tree2WM[154] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(6, 0, 4));
+		Tree2WM[155] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(8, 0, -2));
+		Tree2WM[156] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(8, 0, 0));
+		Tree2WM[157] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(8, 0, 2));
+		Tree2WM[158] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(8, 0, 4));
+		Tree2WM[159] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0, -14));
+		Tree2WM[160] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0, -12));
+		Tree2WM[161] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0, -10));
+		Tree2WM[162] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0, -8));
+		Tree2WM[163] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0, -6));
+		Tree2WM[164] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0, -4));
+		Tree2WM[165] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-10, 0, -2));
+		Tree2WM[166] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-8, 0, -2));
+		Tree2WM[167] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0, -2));
+		Tree2WM[168] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0, 0));
+		Tree2WM[169] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0, 2));
+		Tree2WM[170] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-6, 0, 4));
+		Tree2WM[171] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-16, 0, -8));
+		Tree2WM[172] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-16, 0, -6));
+		Tree2WM[173] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-16, 0, -4));
+		Tree2WM[174] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-16, 0, -2));
+		Tree2WM[175] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-16, 0, 0));
+		Tree2WM[176] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0, -6));
+		Tree2WM[177] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0, -4));
+		Tree2WM[178] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0, -2));
+		Tree2WM[179] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0, 0));
+	}
+
+	void place_spikes() {
+		SpikeWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-6, 0, 8));
+		SpikeWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-5, 0, 8));
+		SpikeWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-4, 0, 8));
+		SpikeWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-4, 0, 7));
+		SpikeWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-4, 0, 6));
+		SpikeWM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(1, 0, 6));
+		SpikeWM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(2, 0, 6));
+		SpikeWM[7] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(7, 0, 8));
+		SpikeWM[8] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(8, 0, 8));
+		SpikeWM[9] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(6, 0, 2));
+		SpikeWM[10] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(6, 0, 3));
+		SpikeWM[11] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-8, 0, 1));
+		SpikeWM[12] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-7, 0, 1));
+		SpikeWM[13] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-6, 0, 1));
+		SpikeWM[14] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-5, 0, 1));
+		SpikeWM[15] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-4, 0, 5));
+		SpikeWM[16] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-1, 0, -1));
+		SpikeWM[17] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(0, 0, -1));
+		SpikeWM[18] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(1, 0, -1));
+		SpikeWM[19] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-1, 0, 1));
+		SpikeWM[20] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(0, 0, 1));
+		SpikeWM[21] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(1, 0, 1));
+		SpikeWM[22] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-1, 0, 0));
+		SpikeWM[23] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-8, 0, -7));
+		SpikeWM[24] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-8, 0, -6));
+		SpikeWM[25] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-8, 0, -5));
+		SpikeWM[26] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-6, 0, -7));
+		SpikeWM[27] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-6, 0, -6));
+		SpikeWM[28] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(-6, 0, -5));
+		SpikeWM[29] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(6, 0, -3));
+		SpikeWM[30] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(6, 0, -2));
+		SpikeWM[31] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(6, 0, -1));
+		SpikeWM[32] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(6, 0, 0));
+		SpikeWM[33] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(5, 0, -4));
+		SpikeWM[34] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(5, 0, -3));
 	}
 
 	int insertLog(int nLog, float angRot, glm::vec3 startPos, int indexNow, bool isPlus) {
