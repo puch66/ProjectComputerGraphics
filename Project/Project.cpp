@@ -122,6 +122,9 @@ class Project : public BaseProject {
 	float yaw;
 	glm::mat3 SkyBoxDir = glm::mat3(1.0f);
 
+	//Current player angle
+	float fixedYaw;
+
 	//current player position
 	glm::vec3 bodyPos;
 	glm::vec3 fixedBodyPos;
@@ -342,6 +345,7 @@ class Project : public BaseProject {
 		CamPitch = glm::radians(15.f);
 		CamYaw = glm::radians(0.f);
 		yaw = 0.0f;
+		fixedYaw = 0.0f;
 		gameState = 0;
 		currentLevel = 0;
 		MoveCam = false;
@@ -833,9 +837,6 @@ class Project : public BaseProject {
 		const float maxPitch = glm::radians(60.0f);
 		float prev_pitch = CamPitch;
 
-		//Current player angle
-		static float fixedYaw = 0.0f;
-
 		const float camDist = 2.0f;
 
 		//handle collisions
@@ -1075,6 +1076,7 @@ class Project : public BaseProject {
 		bodyPos += ux * (MoveCam ? camSpeed : movSpeed) * m.x * deltaT;
 		if (MoveCam) bodyPos += uy * camSpeed * m.y * deltaT;
 		bodyPos += uz * (MoveCam ? camSpeed : movSpeed) * m.z * deltaT;
+		if (bodyPos.y < 0.0f) bodyPos.y = 0.0f;
 
 		glm::mat4 World =
 			glm::translate(glm::mat4(1.0), glm::vec3(bodyPos)) *
@@ -1289,6 +1291,8 @@ class Project : public BaseProject {
 		CamPitch = glm::radians(15.f);
 		CamYaw = glm::radians(0.0f);
 		yaw = 0.0f;
+		fixedBodyPos = pos;
+		fixedYaw = 0.0f;
 	}
 
 	bool isInRectangle(float x_left, float y_up, float x_right, float y_down) {
