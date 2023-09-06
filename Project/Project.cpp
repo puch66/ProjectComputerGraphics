@@ -124,6 +124,7 @@ class Project : public BaseProject {
 	//current player position
 	glm::vec3 bodyPos;
 	glm::vec3 fixedBodyPos;
+	glm::vec3 bodyCollider;
 
 	//handle cursor
 	GLFWcursor* cursor;
@@ -590,6 +591,25 @@ class Project : public BaseProject {
 			DSBody.bind(commandBuffer, PMesh, 1, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
 				static_cast<uint32_t>(MBody.indices.size()), 1, 0, 0, 0);
+			MCloud1.bind(commandBuffer);
+			for (int i = 0; i < n_cloud1; i++) {
+				DSCloud1[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MCloud1.indices.size()), 1, 0, 0, 0);
+			}
+			MCloud2.bind(commandBuffer);
+			for (int i = 0; i < n_cloud2; i++) {
+				DSCloud2[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MCloud2.indices.size()), 1, 0, 0, 0);
+			}
+
+			MCloud3.bind(commandBuffer);
+			for (int i = 0; i < n_cloud3; i++) {
+				DSCloud3[i].bind(commandBuffer, PMesh, 1, currentImage);
+				vkCmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(MCloud3.indices.size()), 1, 0, 0, 0);
+			}
 		}
 		else
 		{
@@ -655,13 +675,6 @@ class Project : public BaseProject {
 					static_cast<uint32_t>(MSmallWater.indices.size()), 1, 0, 0, 0);
 			}
 
-			MCloud1.bind(commandBuffer);
-			for (int i = 0; i < n_cloud1; i++) {
-				DSCloud1[i].bind(commandBuffer, PMesh, 1, currentImage);
-				vkCmdDrawIndexed(commandBuffer,
-					static_cast<uint32_t>(MCloud1.indices.size()), 1, 0, 0, 0);
-			}
-
 			MBridge.bind(commandBuffer);
 			for (int i = 0; i < n_bridge; i++) {
 				DSBridge[i].bind(commandBuffer, PMesh, 1, currentImage);
@@ -674,20 +687,6 @@ class Project : public BaseProject {
 				DSLily[i].bind(commandBuffer, PMesh, 1, currentImage);
 				vkCmdDrawIndexed(commandBuffer,
 					static_cast<uint32_t>(MLily.indices.size()), 1, 0, 0, 0);
-			}
-
-			MCloud2.bind(commandBuffer);
-			for (int i = 0; i < n_cloud2; i++) {
-				DSCloud2[i].bind(commandBuffer, PMesh, 1, currentImage);
-				vkCmdDrawIndexed(commandBuffer,
-					static_cast<uint32_t>(MCloud2.indices.size()), 1, 0, 0, 0);
-			}
-
-			MCloud3.bind(commandBuffer);
-			for (int i = 0; i < n_cloud3; i++) {
-				DSCloud3[i].bind(commandBuffer, PMesh, 1, currentImage);
-				vkCmdDrawIndexed(commandBuffer,
-					static_cast<uint32_t>(MCloud3.indices.size()), 1, 0, 0, 0);
 			}
 
 			MWood.bind(commandBuffer);
@@ -830,7 +829,8 @@ class Project : public BaseProject {
 		const float nearPlane = 0.1f;
 		const float farPlane = 100.0f;
 		const float rotSpeed = glm::radians(120.0f);
-		const float movSpeed = 4.0f;
+		const float movSpeed = 5.0f;
+		const float camSpeed = 10.0f;
 
 		// Camera Pitch limits
 		const float minPitch = glm::radians(-8.75f);
@@ -846,7 +846,7 @@ class Project : public BaseProject {
 		glm::vec3 tx = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(1, 0, 0, 1));
 		glm::vec3 ty = glm::vec3(0, 1, 0);
 		glm::vec3 tz = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(0, 0, -1, 1));
-		glm::vec3 bodyCollider = glm::vec3(bodyPos + tx * movSpeed * m.x * deltaT +
+		bodyCollider = glm::vec3(bodyPos + tx * movSpeed * m.x * deltaT +
 			ty * movSpeed * m.y * deltaT +
 			tz * movSpeed * m.z * deltaT);
 
@@ -929,7 +929,7 @@ class Project : public BaseProject {
 					&& !MoveCam) {
 					m = glm::vec3(0.0f);
 					r = glm::vec3(0.0f);
-					std::cout << "COLLISION" << i;
+					//std::cout << "COLLISION";
 				}
 			}
 
@@ -938,7 +938,7 @@ class Project : public BaseProject {
 					&& !MoveCam) {
 					m = glm::vec3(0.0f);
 					r = glm::vec3(0.0f);
-					reset_position();
+					reset_position(glm::vec3(-16, 0, 15));
 					coinsCollected = 0;
 					curText = 1;
 					place_coins_third_level();
@@ -994,15 +994,15 @@ class Project : public BaseProject {
 						m = glm::vec3(0.0f);
 						r = glm::vec3(0.0f);
 						coinsCollected = 0;
-						reset_position();
 						if (currentLevel == 1) {
+							reset_position();
 							gameState = 2;
 							currentLevel = 2;
 							curText = 1;
 							place_coins_second_level();
 						}
 						else if (currentLevel == 2) {
-							reset_position();
+							reset_position(glm::vec3(-16, 0, 15));
 							gameState = 3;
 							currentLevel = 3;
 							curText = 1;
@@ -1073,9 +1073,10 @@ class Project : public BaseProject {
 		glm::vec3 uy = glm::vec3(0, 1, 0);
 		glm::vec3 uz = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(0, 0, -1, 1));
 		
-		bodyPos += ux * movSpeed * m.x * deltaT;
-		if (MoveCam) bodyPos += uy * movSpeed * m.y * deltaT;
-		bodyPos += uz * movSpeed * m.z * deltaT;
+		
+		bodyPos += ux * (MoveCam ? camSpeed : movSpeed) * m.x * deltaT;
+		if (MoveCam) bodyPos += uy * camSpeed * m.y * deltaT;
+		bodyPos += uz * (MoveCam ? camSpeed : movSpeed) * m.z * deltaT;
 
 		glm::mat4 World =
 			glm::translate(glm::mat4(1.0), glm::vec3(bodyPos)) *
@@ -1270,7 +1271,8 @@ class Project : public BaseProject {
 				gameState = level;
 				currentLevel = level;
 				if (!resume) {
-					reset_position();
+					if (!(level == 3)) reset_position();
+					else reset_position(glm::vec3(-16, 0, 15));
 					coinsCollected = 0;
 					if(level == 1) place_coins_first_level();
 					if (level == 2) place_coins_second_level();
@@ -1282,8 +1284,9 @@ class Project : public BaseProject {
 		}
 	}
 
-	void reset_position() {
-		bodyPos = glm::vec3(0.0f);
+	void reset_position(glm::vec3 pos = glm::vec3(0.0f)) {
+		bodyPos = pos;
+		bodyCollider = pos;
 		CamPitch = glm::radians(15.f);
 		CamYaw = glm::radians(0.0f);
 		yaw = 0.0f;
