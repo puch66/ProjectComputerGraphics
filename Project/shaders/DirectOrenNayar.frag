@@ -8,6 +8,7 @@ layout(location = 2) in vec2 fragUV;
 layout(location = 0) out vec4 outColor;
 
 layout(set = 0, binding = 0) uniform GlobalUniformBufferObject {
+	vec3 lightPos;
 	vec3 DlightDir;		// direction of the direct light
 	vec3 DlightColor;	// color of the direct light
 	vec3 AmbLightColor;	// ambient light
@@ -25,30 +26,41 @@ layout(set = 1, binding = 0) uniform UniformBufferObject {
 
 layout(set = 1, binding = 1) uniform sampler2D tex;
 
-vec3 BRDF(vec3 V, vec3 N, vec3 L, vec3 Md, vec3 Ms, float gamma) {
+vec3 BRDF(vec3 V, vec3 N, vec3 L, vec3 Md, float sigma) {
 	//vec3 V  - direction of the viewer
 	//vec3 N  - normal vector to the surface
 	//vec3 L  - light vector (from the light model)
 	//vec3 Md - main color of the surface
-	//vec3 Ms - specular color of the surface
-	//float gamma - Exponent for power specular term
+	//float sigma - Roughness of the model
 
-	vec3 Diffuse = Md * clamp(dot(N, L),0.0,1.0);
+	float theta_i = acos(dot(L, N));
+	float theta_r = acos(dot(V, N));
+	float alpha = max(theta_i, theta_r);
+	float beta = min(theta_i, theta_r);
 
-	vec3 r = - reflect(L, N);
-	vec3 Specular = Ms * pow(clamp(dot(V, r),0.0,1.0), gamma);
-	//vec3 Specular = cross(Ms, vec3(pow(clamp(dot(V, r),0.0,1.0), gamma))); //why not this???
-	return Diffuse + Specular;
+	float A = 1.0f - 0.5f * pow(sigma, 2.0) / (pow(sigma, 2.0) + 0.33f);
+	float B = 0.45f * pow(sigma, 2.0) / (pow(sigma, 2.0) + 0.09f);
+
+	vec3 vi = normalize(L - dot(L, N) * N);
+	vec3 vr = normalize(L - dot(V, N) * N);
+	float G = max(0, dot(vi, vr));
+
+	vec3 _L =  Md * clamp(dot(L, N), 0.0, 1.0);
+
+	vec3 Diffuse = _L * (A + B * G * sin(alpha) * tan(beta)); 
+	return Diffuse;
 }
 
 void main() {
 	vec3 Norm = normalize(fragNorm);
 	vec3 EyeDir = normalize(gubo.eyePos - fragPos);
 	
+	//spot light model
 	vec3 lightDir = gubo.DlightDir;
 	vec3 lightColor = gubo.DlightColor.rgb;
 
-	vec3 DiffSpec = BRDF(EyeDir, Norm, lightDir, texture(tex, fragUV).rgb, vec3(1.0f), 160.0f);
+	//oren nayar brdf
+	vec3 DiffSpec = BRDF(EyeDir, Norm, lightDir, texture(tex, fragUV).rgb, 1.1f);
 	vec3 Ambient = texture(tex, fragUV).rgb * 0.05f;
 	
 	outColor = vec4(clamp(0.95 * (DiffSpec) * lightColor.rgb + Ambient,0.0,1.0), 1.0f);

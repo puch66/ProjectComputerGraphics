@@ -16,6 +16,7 @@ struct OverlayUniformBlock {
 };
 
 struct GlobalUniformBlock {
+	alignas(16) glm::vec3 lightPos;
 	alignas(16) glm::vec3 DlightDir;
 	alignas(16) glm::vec3 DlightColor;
 	alignas(16) glm::vec3 AmbLightColor;
@@ -60,13 +61,11 @@ class Project : public BaseProject {
 	int curText;
 
 	//number of elements for each object
-	//level one
 	static const int n_ground = 9;
-	//level two
 	static const int n_wood = 25;
 	static const int n_water = 24;
 	static const int n_small_water = 44;
-	static const int n_log = 7;
+	static const int n_log = 773;
 	static const int n_coin = 5;
 	static const int n_cloud1 = 5;
 	static const int n_cloud2 = 5;
@@ -146,6 +145,7 @@ class Project : public BaseProject {
 	//vectors with the distances to check for the collision
 	const glm::vec3 collision_log = glm::vec3(1.0f, 0.3f, 0.5f);
 	const glm::vec3 collision_log_rotated = glm::vec3(0.5f, 0.3f, 1.0f);
+	const glm::vec3 collision_log_rotated30 = glm::vec3(0.7f, 0.3f, 0.8f);
 	const glm::vec3 collision_coin = glm::vec3(0.7f, 1.0f, 0.7f);
 	const glm::vec3 collision_water = glm::vec3(4.0f, 4.0f, 4.0f);
 	const glm::vec3 collision_small_water = glm::vec3(2.0f, 2.0f, 2.0f);
@@ -253,7 +253,7 @@ class Project : public BaseProject {
 		// Third and fourth parameters are respectively the vertex and fragment shaders
 		// The last array, is a vector of pointer to the layouts of the sets that will
 		// be used in this pipeline. The first element will be set 0, and so on..
-		PMesh.init(this, &VMesh, "shaders/MeshVert.spv", "shaders/MeshFrag.spv", {&DSLGubo, &DSLMesh});
+		PMesh.init(this, &VMesh, "shaders/MeshVert.spv", "shaders/DirectOrenNayarFrag.spv", {&DSLGubo, &DSLMesh});
 		PMesh.setAdvancedFeatures(VK_COMPARE_OP_LESS, VK_POLYGON_MODE_FILL,
 									VK_CULL_MODE_NONE, false);
 		POverlay.init(this, &VOverlay, "shaders/OverlayVert.spv", "shaders/OverlayFrag.spv", {&DSLOverlay});
@@ -565,7 +565,7 @@ class Project : public BaseProject {
 		// the second parameter is the number of indexes to be drawn. For a Model object,
 		// this can be retrieved with the .indices.size() method.
 
-		switch (currentLevel) {
+		switch (gameState) {
 		case 1:
 			MMars.bind(commandBuffer);
 			DSMars.bind(commandBuffer, PMesh, 1, currentImage);
@@ -782,8 +782,12 @@ class Project : public BaseProject {
 
 			//check collisions
 			for (int i = 0; i < n_log; i++) {
-				if (checkCollision(bodyCollider, bodyPos, glm::vec3(LogWM[i][3].x, LogWM[i][3].y, LogWM[i][3].z), collision_log)
-					&& !MoveCam) {
+				if (checkCollision(bodyCollider, bodyPos, glm::vec3(LogWM[i][3].x, LogWM[i][3].y, LogWM[i][3].z), collision_log)) {
+					m = glm::vec3(0.0f);
+					r = glm::vec3(0.0f);
+					//std::cout << "COLLISION";
+				}
+				if (checkCollision(bodyCollider, bodyPos, glm::vec3(LogWM[i][3].x, LogWM[i][3].y, LogWM[i][3].z), collision_log_rotated30)) {
 					m = glm::vec3(0.0f);
 					r = glm::vec3(0.0f);
 					//std::cout << "COLLISION";
@@ -939,7 +943,7 @@ class Project : public BaseProject {
 		glm::vec3 uz = glm::vec3(glm::rotate(glm::mat4(1), yaw, glm::vec3(0, 1, 0)) * glm::vec4(0, 0, -1, 1));
 		
 		bodyPos += ux * movSpeed * m.x * deltaT;
-		bodyPos += uy * movSpeed * m.y * deltaT;
+		if (MoveCam) bodyPos += uy * movSpeed * m.y * deltaT;
 		bodyPos += uz * movSpeed * m.z * deltaT;
 
 		glm::mat4 World =
@@ -965,10 +969,12 @@ class Project : public BaseProject {
 							sin(CamPitch),
 							cos(CamPitch) * cos(yaw));
 
-		gubo.DlightDir = glm::normalize(glm::vec3(1, 2, 3));
+		float dang = CamPitch + glm::radians(15.0f);
+		gubo.DlightDir = glm::vec3(cos(dang) * sin(yaw), sin(dang), cos(dang) * cos(yaw));
 		gubo.DlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 		gubo.AmbLightColor = glm::vec3(0.1f);
 		gubo.eyePos = camPos;
+		gubo.lightPos = bodyPos + glm::vec3(0, 1, 0);
 
 		//View-projection matrix
 		glm::mat4 ViewPrj = Prj * View;
@@ -994,7 +1000,7 @@ class Project : public BaseProject {
 		uboSky.nMat = glm::inverse(glm::transpose(uboSky.mMat));
 		DSskyBox.map(currentImage, &uboSky, sizeof(uboSky), 0);
 
-		World = glm::translate(glm::mat4(1.0f), glm::vec3(-1.5f, 2.5f, 0.0f));
+		World = glm::translate(glm::mat4(1.0f), glm::vec3(-100.5f, 55.5f, 0.0f));
 		uboMars.amb = 1.0f; uboMars.gamma = 180.0f; uboMars.sColor = glm::vec3(1.0f);
 		uboMars.mvpMat = ViewPrj * World;
 		uboMars.mMat = World;
@@ -1171,18 +1177,18 @@ class Project : public BaseProject {
 		WoodWM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-4, 0, 8));
 		WoodWM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(4, 0, 8));
 		WoodWM[7] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(4, 0, 4));
-		WoodWM[8] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(0, 0, 4));
+		WoodWM[8] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 1.0f)), glm::vec3(0, 0, 10));
 		WoodWM[9] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(8, 0, -4));
 		WoodWM[10] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(0, 0, -8));
 		WoodWM[11] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-8, 0, -8));
 		WoodWM[12] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-8, 0, 0));
 		WoodWM[13] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(8, 0, 0));
-		WoodWM[14] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-8, 0, 8));
+		WoodWM[14] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 1.0f)), glm::vec3(-8, 0, 18));
 		WoodWM[15] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(8, 0, -8));
-		WoodWM[16] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(8, 0, 8));
+		WoodWM[16] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 1.0f)), glm::vec3(8, 0, 18));
 		WoodWM[17] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(0, 0, 8));
 		WoodWM[18] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-4, 0, -8));
-		WoodWM[19] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-8, 0, -4));
+		WoodWM[19] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 1.0f)), glm::vec3(-8, 0, -6));
 		WoodWM[20] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(4, 0, -8));
 		WoodWM[21] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(4, 0, -4));
 		WoodWM[22] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.0f, 2.0f)), glm::vec3(-8, 0, 4));
@@ -1230,24 +1236,110 @@ class Project : public BaseProject {
 	}
 
 	void place_logs() {
-		LogWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5, 0.2, 0)) *
-			glm::rotate(glm::mat4(1.0), 90.f, glm::vec3(0, 1, 0));
-		LogWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(40, 0.2, -20));
-		LogWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(39, 0.2, -20));
-		LogWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28, 0.2, 8)) *
-			glm::rotate(glm::mat4(1.0), 90.f, glm::vec3(0, 1, 0));
-		LogWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28.8, 0.2, 7.5));
-		LogWM[5] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12, 0.2, -8))
-			* glm::rotate(glm::mat4(1.0), 45.f, glm::vec3(0, 1, 0));
-		LogWM[6] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5, 0.2, 18));
+		int countLog = 0;
+
+		countLog += insertLog(15, 30.f, glm::vec3(0, 0.2, 3), countLog, true);
+		countLog += insertLog(12, 30.f, glm::vec3(2.5f, 0.2, 3), countLog, true);
+
+		countLog += insertLog(5, 0.f, glm::vec3(0.8, 0.2, 17.5), countLog, true);
+		countLog += insertLog(3, 0.f, glm::vec3(3.3f, 0.2, 14.5), countLog, true);
+
+		countLog += insertLog(5, 30.f, glm::vec3(5, 0.2, 18), countLog, true);
+		countLog += insertLog(20, 0.f, glm::vec3(5.8, 0.2, 22.5), countLog, true);
+		countLog += insertLog(4, 30.f, glm::vec3(25, 0.2, 23), countLog, true);
+		countLog += insertLog(10, 0.f, glm::vec3(25, 0.2, 26.5), countLog, false);
+		countLog += insertLog(3, 30.f, glm::vec3(15.8, 0.2, 27), countLog, true);
+		countLog += insertLog(13, 0.f, glm::vec3(16.6, 0.2, 29.5), countLog, true);
+		countLog += insertLog(19, 30.f, glm::vec3(28.8, 0.2, 29.), countLog, false);
+		countLog += insertLog(4, 0.f, glm::vec3(28.8, 0.2, 10.5), countLog, false);
+		countLog += insertLog(9, 30.f, glm::vec3(25.6, 0.2, 11.), countLog, true);
+		countLog += insertLog(18, 0.f, glm::vec3(25.6, 0.2, 19.5), countLog, false);
+		countLog += insertLog(6, 30.f, glm::vec3(8.4, 0.2, 19.), countLog, false);
+		countLog += insertLog(14, 0.f, glm::vec3(8.4, 0.2, 14.), countLog, true);
+		countLog += insertLog(4, 30.f, glm::vec3(21.6, 0.2, 14.), countLog, false);
+		countLog += insertLog(17, 0.f, glm::vec3(21.6, 0.2, 10.5), countLog, false);
+		countLog += insertLog(4, 30.f, glm::vec3(5.6, 0.2, 11.), countLog, true);
+
+		countLog += insertLog(30, 0.f, glm::vec3(3.f, 0.2, 2.5), countLog, true);
+		countLog += insertLog(3, 30.f, glm::vec3(32.5f, 0.2, 2.), countLog, false);
+		countLog += insertLog(4, 0.f, glm::vec3(32.f, 0.2, -.5), countLog, false);
+		countLog += insertLog(8, 30.f, glm::vec3(28.5f, 0.2, -1.), countLog, false);
+		countLog += insertLog(12, 0.f, glm::vec3(29.f, 0.2, -8.5), countLog, true);
+		countLog += insertLog(20, 30.f, glm::vec3(40.5f, 0.2, -9.), countLog, false);
+		countLog += insertLog(3, 0.f, glm::vec3(40.f, 0.2, -28.5), countLog, false);
+		countLog += insertLog(16, 30.f, glm::vec3(37.5f, 0.2, -28.), countLog, true);
+		countLog += insertLog(18, 0.f, glm::vec3(37.f, 0.2, -12.5), countLog, false);
+		countLog += insertLog(16, 30.f, glm::vec3(19.5f, 0.2, -13.), countLog, false);
+		countLog += insertLog(3, 0.f, glm::vec3(19.f, 0.2, -28.5), countLog, false);
+		countLog += insertLog(16, 30.f, glm::vec3(16.5f, 0.2, -28.), countLog, true);
+		countLog += insertLog(32, 0.f, glm::vec3(16.f, 0.2, -12.5), countLog, false);
+		countLog += insertLog(16, 30.f, glm::vec3(-15.5f, 0.2, -13.), countLog, false);
+		countLog += insertLog(3, 0.f, glm::vec3(-16.f, 0.2, -28.5), countLog, false);
+		countLog += insertLog(16, 30.f, glm::vec3(-18.5f, 0.2, -28.), countLog, true);
+		countLog += insertLog(6, 0.f, glm::vec3(-19.f, 0.2, -12.5), countLog, false);
+		countLog += insertLog(16, 30.f, glm::vec3(-24.5f, 0.2, -13.), countLog, false);
+		countLog += insertLog(3, 0.f, glm::vec3(-25.f, 0.2, -28.5), countLog, false);
+		countLog += insertLog(20, 30.f, glm::vec3(-27.5f, 0.2, -28.), countLog, true);
+		countLog += insertLog(24, 0.f, glm::vec3(-27.f, 0.2, -8.5), countLog, true);
+		countLog += insertLog(8, 30.f, glm::vec3(-3.5f, 0.2, -8.), countLog, true);
+		countLog += insertLog(22, 0.f, glm::vec3(3.f, 0.2, -0.5), countLog, true);
+		countLog += insertLog(8, 30.f, glm::vec3(2.5f, 0.2, -1.), countLog, false);
+		countLog += insertLog(8, 30.f, glm::vec3(24.5f, 0.2, -1.), countLog, false);
+		countLog += insertLog(22, 0.f, glm::vec3(3.f, 0.2, -8.5), countLog, true);
+
+		countLog += insertLog(12, 0.f, glm::vec3(-0.5, 0.2, 2.5), countLog, false);
+		glm::vec3 oldPositionVec = findNewPos(12, true, 30.f, glm::vec3(-0.5, 0.2, 2.5), false);
+		countLog += insertLog(8, 30.f, oldPositionVec, countLog, true);
+		oldPositionVec = findNewPos(8, false, 0.f, oldPositionVec, true);
+		countLog += insertLog(8, 0.f, oldPositionVec, countLog, false);
+		oldPositionVec = findNewPos(8, true, 30.f, oldPositionVec, false);
+		countLog += insertLog(8, 30.f, oldPositionVec, countLog, true);
+		oldPositionVec = findNewPos(8, false, 0.f, oldPositionVec, true);
+		countLog += insertLog(12, 0.f, oldPositionVec, countLog, false);
+		oldPositionVec = findNewPos(12, true, 30.f, oldPositionVec, false);
+		countLog += insertLog(4, 30.f, oldPositionVec, countLog, true);
+		oldPositionVec = findNewPos(4, true, 0.f, oldPositionVec, true);
+		countLog += insertLog(21, 0.f, oldPositionVec, countLog, true);
+		oldPositionVec = findNewPos(21, true, 30.f, oldPositionVec, true);
+		countLog += insertLog(3, 30.f, oldPositionVec, countLog, true);
+		oldPositionVec = findNewPos(3, false, 0.f, oldPositionVec, true);
+		countLog += insertLog(24, 0.f, oldPositionVec, countLog, false);
+		oldPositionVec = findNewPos(24, false, 30.f, oldPositionVec, false);
+		countLog += insertLog(18, 30.f, oldPositionVec, countLog, false);
+		oldPositionVec = findNewPos(18, true, 0.f, oldPositionVec, false);
+		countLog += insertLog(3, 0.f, oldPositionVec, countLog, true);
+		oldPositionVec = findNewPos(3, true, 30.f, oldPositionVec, true);
+		countLog += insertLog(8, 30.f, oldPositionVec, countLog, true);
+		oldPositionVec = findNewPos(8, true, 0.f, oldPositionVec, true);
+		countLog += insertLog(9, 0.f, oldPositionVec, countLog, true);
+		oldPositionVec = findNewPos(9, false, 30.f, oldPositionVec, true);
+		countLog += insertLog(12, 30.f, oldPositionVec, countLog, false);
+		oldPositionVec = findNewPos(12, false, 0.f, oldPositionVec, false);
+		countLog += insertLog(12, 0.f, oldPositionVec, countLog, false);
+		oldPositionVec = findNewPos(12, false, 30.f, oldPositionVec, false);
+		countLog += insertLog(15, 30.f, oldPositionVec, countLog, false);
+		oldPositionVec = findNewPos(15, true, 0.f, oldPositionVec, false);
+		countLog += insertLog(3, 0.f, oldPositionVec, countLog, true);
+		oldPositionVec = findNewPos(3, true, 30.f, oldPositionVec, true);
+		countLog += insertLog(12, 30.f, oldPositionVec, countLog, true);
+		oldPositionVec = findNewPos(12, true, 0.f, oldPositionVec, true);
+		countLog += insertLog(13, 0.f, oldPositionVec, countLog, true);
+		oldPositionVec = findNewPos(13, true, 30.f, oldPositionVec, true);
+		countLog += insertLog(7, 30.f, oldPositionVec, countLog, true);
+		oldPositionVec = findNewPos(7, true, 0.f, oldPositionVec, true);
+		countLog += insertLog(4, 0.f, oldPositionVec, countLog, true);
+		oldPositionVec = findNewPos(4, false, 30.f, oldPositionVec, true);
+		countLog += insertLog(8, 30.f, oldPositionVec, countLog, false);
+		oldPositionVec = findNewPos(8, true, 0.f, oldPositionVec, false);
+		countLog += insertLog(12, 0.f, oldPositionVec, countLog, true);
 	}
 
 	void place_coins_first_level() {
-		CoinWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5.7f, 0.7f, 0));
-		CoinWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(39.5, 0.7, -21));
-		CoinWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28.7, 0.7, 8.2));
-		CoinWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12.5, 0.7, -8.6));
-		CoinWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(5.15, 0.7, 18.5));
+		CoinWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(17., 0.7, 28.));
+		CoinWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(31.5, 0.7, 1.2));
+		CoinWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-33.4, 0.7, -9.7));
+		CoinWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12.5, 0.7, 24.));
+		CoinWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(39.2, 0.7, -27.5));
 	}
 
 	void place_coins_second_level() {
@@ -1310,11 +1402,15 @@ class Project : public BaseProject {
 	}
 
 	void place_bridges() {
-		BridgeWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-2, 0, 6));
-		BridgeWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-18, 0, -10));
+		BridgeWM[0] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 1.0f)), glm::vec3(-1, 0, 6))*
+					  glm::rotate(glm::mat4(1.0), glm::radians(90.0f), glm::vec3(0, 1, 0));
+		BridgeWM[1] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 1.0f)), glm::vec3(-9, 0, -10)) *
+					  glm::rotate(glm::mat4(1.0), glm::radians(90.0f), glm::vec3(0, 1, 0));
 		BridgeWM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 2.0f)), glm::vec3(0, 0, -5));
-		BridgeWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-14, 0, 14));
-		BridgeWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(14, 0, 14));
+		BridgeWM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 1.0f)), glm::vec3(-7, 0, 14)) *
+					  glm::rotate(glm::mat4(1.0), glm::radians(90.0f), glm::vec3(0, 1, 0));
+		BridgeWM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(2.0f, 1.5f, 1.0f)), glm::vec3(7, 0, 14)) *
+					  glm::rotate(glm::mat4(1.0), glm::radians(90.0f), glm::vec3(0, 1, 0));
 	}
 
 	void place_clouds() {
@@ -1335,6 +1431,35 @@ class Project : public BaseProject {
 		Cloud3WM[2] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-28.7, 8.7, 0.2));
 		Cloud3WM[3] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(-12.5, 8.7, 8.6));
 		Cloud3WM[4] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f)), glm::vec3(18.15, 8.7, 20.5));
+	}
+
+	int insertLog(int nLog, float angRot, glm::vec3 startPos, int indexNow, bool isPlus) {
+		for (int i = 0; i < nLog; i++) {
+			glm::vec3 addOneLog;
+			if (angRot == 0.f) {
+				addOneLog = glm::vec3(float(i), 0.f, 0.f);
+			}
+			else {
+				addOneLog = glm::vec3(0.f, 0.f, float(i));
+
+			}
+			LogWM[indexNow + i] = glm::translate(glm::scale(glm::mat4(1), glm::vec3(1.0f, 1.f, 1.0f)), startPos + (isPlus ? addOneLog : -addOneLog)) *
+				glm::rotate(glm::mat4(1.0), angRot, glm::vec3(0, 1, 0));
+		}
+		return nLog;
+	}
+
+	glm::vec3 findNewPos(int oldNLog, bool isPlus, float angRot, glm::vec3 oldPos, bool oldPlus) {
+		float newAdd = float(oldNLog) - 0.5f;
+
+		if (angRot == 0.f) { // da vert a ori
+			oldPos += glm::vec3((isPlus ? 0.5f : -0.5f), 0.f, (oldPlus ? newAdd : -newAdd));
+		}
+		else {
+			oldPos += glm::vec3((oldPlus ? newAdd : -newAdd), 0.f, (isPlus ? 0.5f : -0.5f));
+		}
+
+		return oldPos;
 	}
 };
 
