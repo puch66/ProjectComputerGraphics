@@ -157,9 +157,9 @@ class Project : public BaseProject {
 	glm::mat4 SpikeWM[n_spike];
 
 	//vectors with the distances to check for the collision
-	const glm::vec3 collision_log = glm::vec3(1.0f, 0.3f, 0.5f);
+	const glm::vec3 collision_log = glm::vec3(0.6f, 0.3f, 0.3f);
 	const glm::vec3 collision_log_rotated = glm::vec3(0.5f, 0.3f, 1.0f);
-	const glm::vec3 collision_log_rotated30 = glm::vec3(0.7f, 0.3f, 0.8f);
+	const glm::vec3 collision_log_rotated30 = glm::vec3(0.7f, 0.3f, 0.7f);
 	const glm::vec3 collision_coin = glm::vec3(0.7f, 1.0f, 0.7f);
 	const glm::vec3 collision_water = glm::vec3(4.0f, 4.0f, 4.0f);
 	const glm::vec3 collision_small_water = glm::vec3(2.0f, 2.0f, 2.0f);
@@ -1102,12 +1102,11 @@ class Project : public BaseProject {
 							cos(CamPitch) * cos(yaw));
 
 		
-
 		if (gameState != 3) {
 			gubo.DlightDir = glm::normalize(glm::vec3(1, 2, 3));
 			gubo.DlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 			gubo.AmbLightColor = glm::vec3(0.1f);
-			gubo.eyePos = camPos;
+			gubo.eyePos = glm::vec3(0.0f);
 		}
 		else {
 			float dang = CamPitch + glm::radians(15.0f);
