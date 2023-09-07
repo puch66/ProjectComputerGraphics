@@ -352,13 +352,12 @@ class Project : public BaseProject {
 		curText = 0;
 		coinsCollected = 0;
 
+		//initialize world matrixes
 		place_wood(WoodWM);
 		place_ground(GroundWM);
 		place_water(WaterWM);
 		place_logs(LogWM);
 		place_coins_first_level(CoinWM);
-		//place_coins_second_level(CoinWM);
-		//place_level_third_level(CoinWM);
 		place_small_water(SmallWaterWM);
 		place_lily(LilyWM);
 		place_bridges(BridgeWM);
@@ -589,7 +588,7 @@ class Project : public BaseProject {
 	// with their buffers and textures
 	
 	void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
-		if (gameState != 3) {
+		if (currentLevel != 3) {
 			DSGubo.bind(commandBuffer, PMesh, 0, currentImage);
 			PMesh.bind(commandBuffer);
 			MBody.bind(commandBuffer);
@@ -627,7 +626,8 @@ class Project : public BaseProject {
 		}
 		
 
-		switch (gameState) {
+		switch (currentLevel) {
+		case 0: //splash screen
 		case 1: //level1
 			MMars.bind(commandBuffer);
 			DSMars.bind(commandBuffer, PMesh, 1, currentImage);
@@ -715,7 +715,6 @@ class Project : public BaseProject {
 				static_cast<uint32_t>(MskyBox.indices.size()), 1, 0, 0, 0);
 			break;
 		case 3: //level3 
-			//PLevel3.bind(commandBuffer);
 			MMars.bind(commandBuffer);
 			DSMars.bind(commandBuffer, PLevel3, 1, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
@@ -764,28 +763,25 @@ class Project : public BaseProject {
 					static_cast<uint32_t>(MCloud3.indices.size()), 1, 0, 0, 0);
 			}
 			break;
-		case 0: //splash screen
-			POverlay.bind(commandBuffer);
-			MSplash.bind(commandBuffer);
-			DSSplash.bind(commandBuffer, POverlay, 0, currentImage);
-			vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MSplash.indices.size()), 1, 0, 0, 0);
-			break;
 		case 5: //menu
-			POverlay.bind(commandBuffer);
-			MMenu.bind(commandBuffer);
-			DSMenu.bind(commandBuffer, POverlay, 0, currentImage);
-			vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MMenu.indices.size()), 1, 0, 0, 0);
 			break;
 		case 4: //gameover
-			POverlay.bind(commandBuffer);
-			MGameOver.bind(commandBuffer);
-			DSGameOver.bind(commandBuffer, POverlay, 0, currentImage);
-			vkCmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(MGameOver.indices.size()), 1, 0, 0, 0);
 			break;
 		}
+
+		POverlay.bind(commandBuffer);
+		MMenu.bind(commandBuffer);
+		DSMenu.bind(commandBuffer, POverlay, 0, currentImage);
+		vkCmdDrawIndexed(commandBuffer,
+			static_cast<uint32_t>(MMenu.indices.size()), 1, 0, 0, 0);
+		MSplash.bind(commandBuffer);
+		DSSplash.bind(commandBuffer, POverlay, 0, currentImage);
+		vkCmdDrawIndexed(commandBuffer,
+			static_cast<uint32_t>(MSplash.indices.size()), 1, 0, 0, 0);
+		MGameOver.bind(commandBuffer);
+		DSGameOver.bind(commandBuffer, POverlay, 0, currentImage);
+		vkCmdDrawIndexed(commandBuffer,
+			static_cast<uint32_t>(MGameOver.indices.size()), 1, 0, 0, 0);
 
 		txt.populateCommandBuffer(commandBuffer, currentImage, curText);
 
@@ -1048,7 +1044,11 @@ class Project : public BaseProject {
 					curText++;
 					RebuildPipeline();
 				}
-				else if (gameState == 5) gameState = currentLevel;
+				else if (gameState == 5) {
+					cursor = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+					glfwSetCursor(window, cursor);
+					gameState = currentLevel;
+				}
 				else gameState = 5;
 				curText = (gameState == 1 || gameState == 2 || gameState == 3) ? coinsCollected + 1 : 0;
 				RebuildPipeline();
@@ -1149,100 +1149,95 @@ class Project : public BaseProject {
 		uboMars.nMat = glm::inverse(glm::transpose(World));
 		DSMars.map(currentImage, &uboMars, sizeof(uboMars), 0);
 
-		if (gameState == 1) {
-			for (int i = 0; i < n_ground; i++) {
-				uboAssets.mMat = GroundWM[i];
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSGround[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
-			for (int i = 0; i < n_log; i++) {
-				uboAssets.mMat = LogWM[i];
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSLog[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
-		}
-		else if (gameState == 2) {
-			for (int i = 0; i < n_wood; i++) {
-				uboAssets.mMat = WoodWM[i];
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSWood[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
-			for (int i = 0; i < n_water; i++) {
-				uboAssets.mMat = WaterWM[i];
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSWater[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
-			for (int i = 0; i < n_small_water; i++) {
-				uboAssets.mMat = SmallWaterWM[i];
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSSmallWater[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
-			for (int i = 0; i < n_bridge; i++) {
-				uboAssets.mMat = BridgeWM[i];
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSBridge[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
-			for (int i = 0; i < n_lily; i++) {
-				uboAssets.mMat = LilyWM[i];
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSLily[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
-		}
-		else if (gameState == 3) {
-			for (int i = 0; i < n_tree2; i++) {
-				uboAssets.mMat = Tree2WM[i];
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSTree2[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
-			for (int i = 0; i < n_spike; i++) {
-				uboAssets.mMat = SpikeWM[i];
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSSpike[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
-			for (int i = 0; i < n_dirt; i++) {
-				uboAssets.mMat = DirtWM[i];
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSDirt[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
-		}
-		if (gameState == 1 || gameState == 2 || gameState == 3) {
-			for (int i = 0; i < n_cloud1; i++) {
-				uboAssets.mMat = Cloud1WM[i];
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSCloud1[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
 
-			for (int i = 0; i < n_cloud2; i++) {
-				uboAssets.mMat = Cloud2WM[i];
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSCloud2[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
-			for (int i = 0; i < n_cloud3; i++) {
-				uboAssets.mMat = Cloud3WM[i];
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSCloud3[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
-			for (int i = 0; i < n_coin; i++) {
-				uboAssets.mMat = CoinWM[i] * glm::rotate(glm::mat4(1.0), coinAngle, glm::vec3(0, 1, 0));
-				uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
-				uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
-				DSCoin[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
-			}
+		for (int i = 0; i < n_ground; i++) {
+			uboAssets.mMat = GroundWM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSGround[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
 		}
-		
+		for (int i = 0; i < n_log; i++) {
+			uboAssets.mMat = LogWM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSLog[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+		for (int i = 0; i < n_wood; i++) {
+			uboAssets.mMat = WoodWM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSWood[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+		for (int i = 0; i < n_water; i++) {
+			uboAssets.mMat = WaterWM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSWater[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+		for (int i = 0; i < n_small_water; i++) {
+			uboAssets.mMat = SmallWaterWM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSSmallWater[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+		for (int i = 0; i < n_bridge; i++) {
+			uboAssets.mMat = BridgeWM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSBridge[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+		for (int i = 0; i < n_lily; i++) {
+			uboAssets.mMat = LilyWM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSLily[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+
+		for (int i = 0; i < n_tree2; i++) {
+			uboAssets.mMat = Tree2WM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSTree2[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+		for (int i = 0; i < n_spike; i++) {
+			uboAssets.mMat = SpikeWM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSSpike[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+		for (int i = 0; i < n_dirt; i++) {
+			uboAssets.mMat = DirtWM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSDirt[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+
+		for (int i = 0; i < n_cloud1; i++) {
+			uboAssets.mMat = Cloud1WM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSCloud1[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+
+		for (int i = 0; i < n_cloud2; i++) {
+			uboAssets.mMat = Cloud2WM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSCloud2[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+		for (int i = 0; i < n_cloud3; i++) {
+			uboAssets.mMat = Cloud3WM[i];
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSCloud3[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+		for (int i = 0; i < n_coin; i++) {
+			uboAssets.mMat = CoinWM[i] * glm::rotate(glm::mat4(1.0), coinAngle, glm::vec3(0, 1, 0));
+			uboAssets.mvpMat = ViewPrj * uboAssets.mMat;
+			uboAssets.nMat = glm::inverse(glm::transpose(uboAssets.mMat));
+			DSCoin[i].map(currentImage, &uboAssets, sizeof(uboAssets), 0);
+		}
+
 		/* map the uniform data block to the GPU */
 
 		uboGameOver.visible = (gameState == 4) ? 1.0f : 0.0f;
