@@ -1095,25 +1095,25 @@ class Project : public BaseProject {
 		//Projection matrix
 		glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
 		Prj[1][1] *= -1;
-		glm::vec3 camTarget = glm::vec3(0, CamH, 0);
+		/*glm::vec3 camTarget = glm::vec3(0, CamH, 0);
 		glm::vec3 camPos =  camTarget +
 							CamRadius * glm::vec3(cos(CamPitch) * sin(yaw),
 							sin(CamPitch),
-							cos(CamPitch) * cos(yaw));
+							cos(CamPitch) * cos(yaw));*/
 
 		
 		if (gameState != 3) {
 			gubo.DlightDir = glm::normalize(glm::vec3(1, 2, 3));
 			gubo.DlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 			gubo.AmbLightColor = glm::vec3(0.1f);
-			gubo.eyePos = glm::vec3(0.0f);
+			gubo.eyePos = bodyPos;//glm::vec3(0.0f);
 		}
 		else {
 			float dang = CamPitch + glm::radians(15.0f);
 			gubo.DlightDir = glm::vec3(cos(dang) * sin(yaw), sin(dang), cos(dang) * cos(yaw));
 			gubo.DlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 			gubo.AmbLightColor = glm::vec3(0.1f);
-			gubo.eyePos = camPos;
+			gubo.eyePos = bodyPos;//camPos;
 			gubo.lightPos = bodyPos + glm::vec3(0, 1, 0);
 		}
 
